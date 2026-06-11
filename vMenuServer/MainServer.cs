@@ -494,17 +494,70 @@ namespace vMenuServer
         /// <param name="source"></param>
         /// <param name="vehicleNetId"></param>
         /// <param name="playerOwner"></param>
+        private bool RaceScriptProtectsVehicle(int vehicle)
+        {
+            try
+            {
+                if (GetResourceState("racescript") != "started")
+                {
+                    return false;
+                }
+
+                var protectedVehicle = Exports["racescript"].isVehicleDeleteProtected(vehicle);
+                return protectedVehicle is bool value && value;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool VehicleHasPlayerInAnySeat(int vehicle)
+        {
+            for (var seat = -1; seat <= 15; seat++)
+            {
+                var ped = GetPedInVehicleSeat(vehicle, seat);
+                if (ped != 0 && IsPedAPlayer(ped))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var player in Players)
+            {
+                var ped = GetPlayerPed(player.Handle);
+                if (ped != 0 && GetVehiclePedIsIn(ped, false) == vehicle)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         [EventHandler("vMenu:DelAllVehServ")]
         public void DelAllVehServ([FromSource] Player source)
         {
             var vehdelnum = 0;
             foreach (int veh in GetAllVehicles())
             {
-                if (!IsPedAPlayer(GetPedInVehicleSeat(veh, -1)))
+                if (!DoesEntityExist(veh))
                 {
-                    vehdelnum++;
-                    DeleteEntity(veh);
+                    continue;
                 }
+
+                if (RaceScriptProtectsVehicle(veh))
+                {
+                    continue;
+                }
+
+                if (VehicleHasPlayerInAnySeat(veh))
+                {
+                    continue;
+                }
+
+                vehdelnum++;
+                DeleteEntity(veh);
             }
             if (vMenuShared.ConfigManager.GetSettingsBool(vMenuShared.ConfigManager.Setting.pfvmenu_moshnotify_setting))
             {
