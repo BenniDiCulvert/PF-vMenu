@@ -77,6 +77,45 @@ namespace vMenuClient
         }
         #endregion
 
+        #region Sponsor plate (Carbon Mile)
+        // The server-validated sponsor plate for this player (tier is decided server-side). Empty/-1 means "none".
+        private static string _sponsorPlateText = "";
+        private static int _sponsorPlateStyle = -1;
+
+        // Called by the server push (vMenu:SetSponsorPlate). The server has already validated membership/tier.
+        public static void SetSponsorPlate(string plateText, int plateStyle)
+        {
+            _sponsorPlateText = plateText ?? "";
+            _sponsorPlateStyle = plateStyle;
+        }
+
+        // Ask the server for our validated sponsor plate. Cheap; re-validates membership server-side each time.
+        public static void RequestSponsorPlate() => TriggerServerEvent("vMenu:RequestSponsorPlate");
+
+        // Stamp the sponsor plate (text + style) onto a freshly random/traffic-spawned vehicle. No-op if none.
+        public static async void ApplySponsorPlate(int vehicleHandle)
+        {
+            if (string.IsNullOrEmpty(_sponsorPlateText) && _sponsorPlateStyle < 0)
+            {
+                return;
+            }
+            // Wait past ApplyVehicleModsDelayed (~500ms) so the sponsor plate wins over any saved-mod plate.
+            await Delay(700);
+            if (vehicleHandle == 0 || !DoesEntityExist(vehicleHandle))
+            {
+                return;
+            }
+            if (!string.IsNullOrEmpty(_sponsorPlateText))
+            {
+                SetVehicleNumberPlateText(vehicleHandle, _sponsorPlateText);
+            }
+            if (_sponsorPlateStyle >= 0)
+            {
+                SetVehicleNumberPlateTextIndex(vehicleHandle, _sponsorPlateStyle);
+            }
+        }
+        #endregion
+
         public static void CopyToClipboard(string text)
         {
             SendNuiMessage(JsonConvert.SerializeObject(new { type = "copyToClipboard", text }));
@@ -1684,6 +1723,12 @@ namespace vMenuClient
             {
                 int handle = vehicle.Handle;
                 SetVehicleAsNoLongerNeeded(ref handle);
+            }
+
+            // Carbon Mile: traffic-style (destructible) spawns of non-saved vehicles get the sponsor plate too.
+            if (destructible && string.IsNullOrEmpty(saveName))
+            {
+                ApplySponsorPlate(vehicle.Handle);
             }
 
             return vehicle.Handle;

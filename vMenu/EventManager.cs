@@ -40,6 +40,10 @@ namespace vMenuClient
             EventHandlers.Add("vMenu:GetOutOfCar", new Action<int, int>(GetOutOfCar));
             EventHandlers.Add("vMenu:SetDriftSuspension", new Action<int, bool>(SetDriftSuspension));
             EventHandlers.Add("vMenu:PrivateMessage", new Action<string, string>(PrivateMessage));
+            // Carbon Mile: cache the server-validated sponsor plate, and re-fetch when the player edits it.
+            EventHandlers.Add("vMenu:SetSponsorPlate", new Action<string, int>(CommonFunctions.SetSponsorPlate));
+            EventHandlers.Add("vMenu:UsersettingUpdated:racePlateText", new Action<object>(async _ => { await Delay(1500); CommonFunctions.RequestSponsorPlate(); }));
+            EventHandlers.Add("vMenu:UsersettingUpdated:racePlateStyle", new Action<object>(async _ => { await Delay(1500); CommonFunctions.RequestSponsorPlate(); }));
             EventHandlers.Add("onClientResourceStart", async (string resourceName) =>
             {
                 if (resourceName == GetCurrentResourceName())
@@ -49,6 +53,9 @@ namespace vMenuClient
                     {
                         Notify.Info("vMenu save data loaded from server. You may need to restart your game to use it.");
                     }
+                    // Carbon Mile: fetch the sponsor plate once the server/DB is ready.
+                    await Delay(2000);
+                    CommonFunctions.RequestSponsorPlate();
                 }
             });
             EventHandlers.Add("vMenu:ServerKeyValueStoreResponse", RemoteKeyValueStore.ReceiveResponse);
