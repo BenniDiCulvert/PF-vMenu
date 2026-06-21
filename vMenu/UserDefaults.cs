@@ -176,6 +176,12 @@ namespace vMenuClient
             set { SetSavedSettingsBool("vehicleSpawnerSpawnInside", value); }
         }
 
+        public static SavedPlate VehicleSpawnerDefaultPlate
+        {
+            get { return JsonConvert.DeserializeObject<SavedPlate>(GetSettingsString("vehicleSpawnerDefaultPlate") ?? "{}"); }
+            set { SetSavedSettingsString("vehicleSpawnerDefaultPlate", JsonConvert.SerializeObject(value)); }
+        }
+
         public static bool VehicleSpawnerReplacePrevious
         {
             get { return GetSettingsBool("vehicleSpawnerReplacePrevious"); }
@@ -326,8 +332,8 @@ namespace vMenuClient
 
         public static string MiscCurrentLanguage
         {
-            get { return KeyValueStore.GetString($"{SETTINGS_PREFIX}miscCurrentLanguage"); }
-            set { KeyValueStore.Set($"{SETTINGS_PREFIX}miscCurrentLanguage", value); }
+            get { return GetSettingsString($"miscCurrentLanguage"); }
+            set { SetSavedSettingsString($"miscCurrentLanguage", value); }
         }
 
         #region keybind menu
@@ -483,6 +489,18 @@ namespace vMenuClient
         }
 
         private static void SetSavedSettingsInt(string kvpString, int newValue)
+        {
+            KeyValueStore.Set(SETTINGS_PREFIX + kvpString, newValue);
+        }
+
+        private static string GetSettingsString(string kvpString)
+        {
+            // Get the current value.
+            var savedValue = KeyValueStore.GetString($"{SETTINGS_PREFIX}{kvpString}");
+            return savedValue;
+        }
+
+        private static void SetSavedSettingsString(string kvpString, string newValue)
         {
             KeyValueStore.Set(SETTINGS_PREFIX + kvpString, newValue);
         }

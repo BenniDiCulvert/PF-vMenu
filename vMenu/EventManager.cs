@@ -40,25 +40,68 @@ namespace vMenuClient
             EventHandlers.Add("vMenu:GetOutOfCar", new Action<int, int>(GetOutOfCar));
             EventHandlers.Add("vMenu:SetDriftSuspension", new Action<int, bool>(SetDriftSuspension));
             EventHandlers.Add("vMenu:PrivateMessage", new Action<string, string>(PrivateMessage));
-            // Carbon Mile: cache the server-validated sponsor plate, and re-fetch when the player edits it.
-            EventHandlers.Add("vMenu:SetSponsorPlate", new Action<string, int>(CommonFunctions.SetSponsorPlate));
-            EventHandlers.Add("vMenu:UsersettingUpdated:racePlateText", new Action<object>(async _ => { await Delay(1500); CommonFunctions.RequestSponsorPlate(); }));
-            EventHandlers.Add("vMenu:UsersettingUpdated:racePlateStyle", new Action<object>(async _ => { await Delay(1500); CommonFunctions.RequestSponsorPlate(); }));
+            EventHandlers.Add("vMenu:SetDefaultPlate", new Action<string>(plate => SetDefaultPlate(JsonConvert.DeserializeObject<SavedPlate>(plate))));
             EventHandlers.Add("onClientResourceStart", async (string resourceName) =>
             {
                 if (resourceName == GetCurrentResourceName())
                 {
+                    // wait a bit before syncing with the server
+                    await Delay(2000);
+
                     var localChanges = await KeyValueStore.SyncWithServer();
                     if (localChanges)
                     {
                         Notify.Info("vMenu save data loaded from server. You may need to restart your game to use it.");
                     }
-                    // Carbon Mile: fetch the sponsor plate once the server/DB is ready.
-                    await Delay(2000);
-                    CommonFunctions.RequestSponsorPlate();
                 }
             });
             EventHandlers.Add("vMenu:ServerKeyValueStoreResponse", RemoteKeyValueStore.ReceiveResponse);
+
+#if CARBON_MILE
+            void CarbonMileRequestSponsorPlate() => TriggerServerEvent("vMenu:RequestSponsorPlate");
+
+            EventHandlers.Add("onClientResourceStart", async (string resourceName) =>
+            {
+                // Reset this first before we load it from the server
+                SetSponsorPlate(null, -1);
+
+                if (resourceName == GetCurrentResourceName())
+                {
+                    // wait a bit before syncing with the server
+                    await Delay(2000);
+                    CarbonMileRequestSponsorPlate();
+                }
+            });
+
+            void SetSponsorPlate(string text, int style)
+            {
+                SetDefaultPlate(new SavedPlate
+                {
+                    Text = text,
+                    Style = style >= 0 ? (LicensePlateStyle)style : null
+                });
+            }
+
+            ulong nextSponsorPlateRequestId = 0;
+
+            async void RequestSponsorPlateDelayed(object _)
+            {
+                var requestId = nextSponsorPlateRequestId++;
+
+                await Delay(USERSETTING_SYNC_INTERVAL + 1500);
+
+                if (requestId != nextSponsorPlateRequestId - 1)
+                {
+                    return;
+                }
+
+                CarbonMileRequestSponsorPlate();
+            }
+
+            EventHandlers.Add("vMenu:SetSponsorPlate", new Action<string, int>(SetSponsorPlate));
+            EventHandlers.Add("vMenu:UsersettingUpdated:racePlateText", new Action<object>(RequestSponsorPlateDelayed));
+            EventHandlers.Add("vMenu:UsersettingUpdated:racePlateStyle", new Action<object>(RequestSponsorPlateDelayed));
+#endif
 
             RegisterNuiCallbackType("disableImportExportNUI");
             RegisterNuiCallbackType("importData");
@@ -115,6 +158,8 @@ namespace vMenuClient
             TriggerEvent("vMenu:GetSavedVehicleModsResponse", vehicleInfo);
         }
 
+        public const int USERSETTING_SYNC_INTERVAL = 5000;
+
         [Tick]
         public async Task SyncUsersettings()
         {
@@ -125,7 +170,7 @@ namespace vMenuClient
                 data.Usersettings.SyncUpdatedUsersettings();
             }
 
-            await Delay(5000);
+            await Delay(USERSETTING_SYNC_INTERVAL);
         }
 
         [EventHandler("__cfx_nui:importData")]

@@ -77,44 +77,35 @@ namespace vMenuClient
         }
         #endregion
 
-        #region Sponsor plate (Carbon Mile)
-        // The server-validated sponsor plate for this player (tier is decided server-side). Empty/-1 means "none".
-        private static string _sponsorPlateText = "";
-        private static int _sponsorPlateStyle = -1;
-
-        // Called by the server push (vMenu:SetSponsorPlate). The server has already validated membership/tier.
-        public static void SetSponsorPlate(string plateText, int plateStyle)
+        public class SavedPlate
         {
-            _sponsorPlateText = plateText ?? "";
-            _sponsorPlateStyle = plateStyle;
+            public string Text { get; set; } = null;
+            public LicensePlateStyle? Style { get; set; } = null;
         }
 
-        // Ask the server for our validated sponsor plate. Cheap; re-validates membership server-side each time.
-        public static void RequestSponsorPlate() => TriggerServerEvent("vMenu:RequestSponsorPlate");
-
-        // Stamp the sponsor plate (text + style) onto a freshly random/traffic-spawned vehicle. No-op if none.
-        public static async void ApplySponsorPlate(int vehicleHandle)
+        public static void SetDefaultPlate(SavedPlate plate)
         {
-            if (string.IsNullOrEmpty(_sponsorPlateText) && _sponsorPlateStyle < 0)
+            UserDefaults.VehicleSpawnerDefaultPlate = plate;
+        }
+
+        // Apply the default plate (text and style) to the vehicle.
+        public static void ApplyDefaultPlate(Vehicle vehicle)
+        {
+            var plate = UserDefaults.VehicleSpawnerDefaultPlate;
+
+            if (plate == null || !vehicle.Exists())
             {
                 return;
             }
-            // Wait past ApplyVehicleModsDelayed (~500ms) so the sponsor plate wins over any saved-mod plate.
-            await Delay(700);
-            if (vehicleHandle == 0 || !DoesEntityExist(vehicleHandle))
+            if (!string.IsNullOrEmpty(plate.Text))
             {
-                return;
+                vehicle.Mods.LicensePlate = plate.Text;
             }
-            if (!string.IsNullOrEmpty(_sponsorPlateText))
+            if (plate.Style != null)
             {
-                SetVehicleNumberPlateText(vehicleHandle, _sponsorPlateText);
-            }
-            if (_sponsorPlateStyle >= 0)
-            {
-                SetVehicleNumberPlateTextIndex(vehicleHandle, _sponsorPlateStyle);
+                vehicle.Mods.LicensePlateStyle = (LicensePlateStyle)(plate.Style);
             }
         }
-        #endregion
 
         public static void CopyToClipboard(string text)
         {
@@ -1484,11 +1475,8 @@ namespace vMenuClient
             SetVehicleMod(vehicle.Handle, (int)VehicleModType.Spoilers, 0, false);
         }
 
-        private async static Task FullyUpgradeVehicle(Vehicle vehicle, int delay = 500)
+        private static void FullyUpgradeVehicle(Vehicle vehicle)
         {
-            await Delay(delay);
-
-            vehicle.Mods.InstallModKit();
             ApplyNonStockSpoiler(vehicle);
             FullyUpgradeVehicleMod(vehicle, VehicleModType.Engine);
             FullyUpgradeVehicleMod(vehicle, VehicleModType.Brakes);
@@ -1689,11 +1677,25 @@ namespace vMenuClient
             // If mod info about the vehicle was specified, check if it's not null.
             if (!string.IsNullOrEmpty(saveName))
             {
-                ApplyVehicleModsDelayed(vehicle, vehicleInfo, 500);
+                _ = ApplyVehicleModsDelayed(vehicle, vehicleInfo, 500);
             }
-            else if (upgraded)
+            else
             {
-                _ = FullyUpgradeVehicle(vehicle);
+                async Task ApplyVehicleMods()
+                {
+                    vehicle.Mods.InstallModKit();
+
+                    await Delay(500);
+
+                    if (upgraded)
+                    {
+                        FullyUpgradeVehicle(vehicle);
+                    }
+
+                    ApplyDefaultPlate(vehicle);
+                }
+
+                _ = ApplyVehicleMods();
             }
 
             // Set the previous vehicle to the new vehicle.
@@ -1725,12 +1727,6 @@ namespace vMenuClient
                 SetVehicleAsNoLongerNeeded(ref handle);
             }
 
-            // Carbon Mile: traffic-style (destructible) spawns of non-saved vehicles get the sponsor plate too.
-            if (destructible && string.IsNullOrEmpty(saveName))
-            {
-                ApplySponsorPlate(vehicle.Handle);
-            }
-
             return vehicle.Handle;
         }
 
@@ -1739,7 +1735,7 @@ namespace vMenuClient
         /// </summary>
         /// <param name="vehicle"></param>
         /// <param name="vehicleInfo"></param>
-        private static async void ApplyVehicleModsDelayed(Vehicle vehicle, VehicleInfo vehicleInfo, int delay)
+        private static async Task ApplyVehicleModsDelayed(Vehicle vehicle, VehicleInfo vehicleInfo, int delay)
         {
             if (vehicle != null && vehicle.Exists())
             {

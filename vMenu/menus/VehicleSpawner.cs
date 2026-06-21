@@ -446,15 +446,13 @@ namespace vMenuClient.menus
                 return;
             }
             var veh = randomVehiclesList[random.Next(0, randomVehiclesList.Count)];
-            var spawnedHandle = await SpawnVehicle(
+            await SpawnVehicle(
                 veh,
                 SpawnInVehicle,
                 ReplaceVehicle,
                 destructible: SpawnDestructible,
                 upgraded: SpawnUpgraded,
                 withSavedModifications: SpawnWithSavedMods);
-            // Carbon Mile: random spawns get the sponsor plate (server-validated, no-op otherwise).
-            ApplySponsorPlate(spawnedHandle);
         }
 
         private List<string> randomSportyVehiclesList;
@@ -466,15 +464,13 @@ namespace vMenuClient.menus
                 return;
             }
             var veh = randomSportyVehiclesList[random.Next(0, randomSportyVehiclesList.Count)];
-            var spawnedHandle = await SpawnVehicle(
+            await SpawnVehicle(
                 veh,
                 SpawnInVehicle,
                 ReplaceVehicle,
                 destructible: SpawnDestructible,
                 upgraded: SpawnUpgraded,
                 withSavedModifications: SpawnWithSavedMods);
-            // Carbon Mile: random spawns get the sponsor plate (server-validated, no-op otherwise).
-            ApplySponsorPlate(spawnedHandle);
         }
 
 
