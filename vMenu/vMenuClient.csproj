@@ -2,12 +2,15 @@
   <PropertyGroup>
     <TargetFramework>net452</TargetFramework>
     <DebugType>embedded</DebugType>
-    <Configurations>Release;Debug</Configurations>
+    <Configurations>Release;Debug;ReleaseCarbonMile;DebugCarbonMile</Configurations>
     <AssemblyName>vMenuClient.net</AssemblyName>
     <TargetName>$(AssemblyName)</TargetName>
     <OutputPath>..\build\</OutputPath>
     <DefineConstants>CLIENT</DefineConstants>
     <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="$(Configuration.Contains('CarbonMile'))">
+    <DefineConstants>$(DefineConstants);CARBON_MILE</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\SharedClasses\ConfigManager.cs" Link="ConfigManager.cs" />
