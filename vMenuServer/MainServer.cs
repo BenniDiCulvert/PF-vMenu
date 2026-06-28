@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using CitizenFX.Core;
 
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 using vMenuShared;
 
@@ -487,31 +486,6 @@ namespace vMenuServer
                 }));
         }
 
-        #region kick players from personal vehicle
-        /// <summary>
-        /// Makes the player leave the personal vehicle.
-        /// </summary>
-        /// <param name="source"></param>
-        /// <param name="vehicleNetId"></param>
-        /// <param name="playerOwner"></param>
-        private bool RaceScriptProtectsVehicle(int vehicle)
-        {
-            try
-            {
-                if (GetResourceState("racescript") != "started")
-                {
-                    return false;
-                }
-
-                var protectedVehicle = Exports["racescript"].isVehicleDeleteProtected(vehicle);
-                return protectedVehicle is bool value && value;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         private bool VehicleHasPlayerInAnySeat(int vehicle)
         {
             for (var seat = -1; seat <= 15; seat++)
@@ -535,6 +509,40 @@ namespace vMenuServer
             return false;
         }
 
+        #region kick players from personal vehicle
+        private bool IsVehicleDeleteProtected(int vehicle)
+        {
+#if CARBON_MILE
+            bool CarbonMileRaceScriptProtectsVehicle()
+            {
+                try
+                {
+                    if (GetResourceState("racescript") != "started")
+                    {
+                        return false;
+                    }
+
+                    var protectedVehicle = Exports["racescript"].isVehicleDeleteProtected(vehicle);
+                    return protectedVehicle is bool value && value;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return CarbonMileRaceScriptProtectsVehicle() || VehicleHasPlayerInAnySeat(vehicle);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>
+        /// Makes the player leave the personal vehicle.
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="vehicleNetId"></param>
+        /// <param name="playerOwner"></param>
         [EventHandler("vMenu:DelAllVehServ")]
         public void DelAllVehServ([FromSource] Player source)
         {
@@ -546,12 +554,7 @@ namespace vMenuServer
                     continue;
                 }
 
-                if (RaceScriptProtectsVehicle(veh))
-                {
-                    continue;
-                }
-
-                if (VehicleHasPlayerInAnySeat(veh))
+                if (IsVehicleDeleteProtected(veh))
                 {
                     continue;
                 }
