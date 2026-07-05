@@ -15,8 +15,6 @@ namespace vMenuClient
         public static Entity CurrentEntity { get; private set; } = null;
         private int scaleform = 0;
 
-        public static float RotationSnap { get; set; } = 15f;
-
         public static bool SetSpawnNetworked(bool value)
         {
             if (Active)
@@ -28,10 +26,27 @@ namespace vMenuClient
             return true;
         }
 
+        public enum RotationAxis
+        {
+            Pitch,
+            Roll,
+            Yaw,
+        }
+
+        public enum RotationDirection
+        {
+            Forward,
+            Backward,
+        }
+
         public static bool PlaceOnGround { get; set; } = true;
-        public static bool AlignToSurface { get; set; } = false;
+        public static bool AlignToSurfaceContinuously { get; set; } = false;
         public static float PlacementDistance { get; set; } = 20f;
         public static float PlacementRotation { get; set; } = 0f;
+        public static float PlacementPitch { get; set; } = 0f;
+        public static float PlacementRoll { get; set; } = 0f;
+        public static float PlacementYaw { get; set; } = 0f;
+
 
         public static bool SpawnDynamic { get; set; }
 
@@ -169,6 +184,7 @@ namespace vMenuClient
             {
                 Active = false;
                 CurrentEntity = null;
+                ResetRotation();
             }
         }
 
@@ -230,6 +246,48 @@ namespace vMenuClient
             CommonFunctions.CopyToClipboard(sb.ToString());
         }
 
+        public static void RotateEntity(RotationAxis axis, RotationDirection direction, float amount)
+        {
+            var applyRot = (float before) =>
+            {
+                var mul = (direction == RotationDirection.Backward) ? 1f : -1f;
+                var after = before + mul * amount;
+                if (after >= 360f)
+                {
+                    after -= 360f;
+                }
+                else if (after < 0f)
+                {
+                    after += 360f;
+                }
+                return after;
+            };
+
+            switch (axis)
+            {
+                case RotationAxis.Pitch:
+                    PlacementPitch = applyRot(PlacementPitch);
+                    break;
+                case RotationAxis.Roll:
+                    PlacementRoll = applyRot(PlacementRoll);
+                    break;
+                case RotationAxis.Yaw:
+                    PlacementYaw = applyRot(PlacementYaw);
+                    break;
+            }
+        }
+
+        public static void ResetPitchRoll()
+        {
+            PlacementPitch = 0f;
+            PlacementRoll = 0f;
+        }
+
+        public static void ResetRotation()
+        {
+            ResetPitchRoll();
+            PlacementYaw = 0f;
+        }
         #endregion
 
         #region InternalMethods
@@ -307,6 +365,27 @@ namespace vMenuClient
             return dest;
         }
 
+        public static void AlignEntityToSurface()
+        {
+            if (CurrentEntity == null)
+            {
+                return;
+            }
+
+            if (CurrentEntity.Model.IsVehicle)
+            {
+                SetVehicleOnGroundProperly(CurrentEntity.Handle);
+            }
+            else
+            {
+                PlaceObjectOnGroundProperly(CurrentEntity.Handle);
+            }
+
+            var rot = CurrentEntity.Rotation;
+            PlacementPitch = rot.X;
+            PlacementRoll = rot.Y;
+        }
+
         #endregion
 
         /// <summary>
@@ -350,12 +429,12 @@ namespace vMenuClient
                 SetEntityInvincible(handle, true);
                 SetEntityCollision(handle, false, false);
                 SetEntityAlpha(handle, (int)(255 * 0.4), 0);
-                CurrentEntity.Heading = (GetGameplayCamRot(0).Z + PlacementRotation) % 360f;
 
                 var newPosition = GetCoordsPlayerIsLookingAt();
 
                 CurrentEntity.Position = newPosition;
-                if (PlaceOnGround && AlignToSurface && CurrentEntity.HeightAboveGround < 3.0f)
+
+                if (PlaceOnGround && AlignToSurfaceContinuously && CurrentEntity.HeightAboveGround < 3.0f)
                 {
                     if (CurrentEntity.Model.IsVehicle)
                     {
@@ -365,7 +444,33 @@ namespace vMenuClient
                     {
                         PlaceObjectOnGroundProperly(CurrentEntity.Handle);
                     }
+
+                    var rot = CurrentEntity.Rotation;
+
+                    PlacementPitch = rot.X;
+                    PlacementRoll = rot.Y;
                 }
+
+                float ClampRot(float rot)
+                {
+                    if (rot >= 360f)
+                    {
+                        return rot - 360f;
+                    }
+                    if (rot < 0)
+                    {
+                        return rot + 360f;
+                    }
+                    return rot;
+                }
+
+                SetEntityRotation(
+                    CurrentEntity.Handle,
+                    ClampRot(PlacementPitch),
+                    ClampRot(PlacementRoll),
+                    ClampRot(GetGameplayCamRot(0).Z + PlacementYaw),
+                    2,
+                    false);
 
                 await Delay(0);
 
