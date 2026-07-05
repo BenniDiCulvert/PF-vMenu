@@ -631,7 +631,7 @@ namespace vMenuClient.menus
                             return;
                         }
 
-                        var result = await GetUserInput(windowTitle: "Enter model name", 100);
+                        var result = await GetUserInput(windowTitle: "Enter model name or hash", 100);
 
                         if (string.IsNullOrEmpty(result))
                         {

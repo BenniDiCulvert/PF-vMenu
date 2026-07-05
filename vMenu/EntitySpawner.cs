@@ -85,7 +85,21 @@ namespace vMenuClient
         /// <returns>true spawn was succesful</returns>
         public static void SpawnEntity(string model, Vector3 coords)
         {
-            SpawnEntity((uint)GetHashKey(model), coords);
+            uint modelHash = 0;
+
+            if (uint.TryParse(model, out var resultUint))
+            {
+                modelHash = resultUint;
+            }
+            else if (int.TryParse(model, out var resultInt))
+            {
+                modelHash = (uint)resultInt;
+            }
+            else
+            {
+                modelHash = (uint)GetHashKey(model);
+            }
+            SpawnEntity(modelHash, coords);
         }
 
         /// <summary>
