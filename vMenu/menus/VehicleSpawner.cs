@@ -509,7 +509,8 @@ namespace vMenuClient.menus
                         IsThisModelASubmersible(hash) ||
                         IsThisModelAnAmphibiousCar(hash) ||
                         IsThisModelAnAmphibiousQuadbike((int)hash) ||
-                        IsThisModelAnEmergencyBoat(hash);
+                        IsThisModelAnEmergencyBoat(hash) ||
+                        veh.Class == (int)VehicleClass.Boats;
                 })
                 .Select(veh => veh.Shortname)
                 .ToList();
@@ -571,7 +572,7 @@ namespace vMenuClient.menus
             }
 
             {
-                var spawnRandom = new MenuItem("Spawn Random Vehicle", "Spawn a random land-based vehicle.").ToWrapped();
+                var spawnRandom = new MenuItem("Spawn Random Vehicle", "Spawn a random vehicle vehicle.").ToWrapped();
                 spawnRandom.Selected += async (_s, _args) => await SpawnRandomVehicle();
 
                 menu.AddItem(spawnRandom);
@@ -579,7 +580,7 @@ namespace vMenuClient.menus
 
             if (randomSportyVehiclesList.Count > 0)
             {
-                var spawnRandomSporty = new MenuItem("Spawn Random Sporty Vehicle", "Spawn a random, but sporty land-based vehicle.").ToWrapped();
+                var spawnRandomSporty = new MenuItem("Spawn Random Sporty Vehicle", "Spawn a random, sporty land-based vehicle.").ToWrapped();
                 spawnRandomSporty.Selected += async (_s, _args) => await SpawnRandomSportyVehicle();
 
                 menu.AddItem(spawnRandomSporty);

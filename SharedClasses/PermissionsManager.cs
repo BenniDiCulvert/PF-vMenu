@@ -128,6 +128,7 @@ namespace vMenuShared
             VSDisableReplacePrevious,
             VSSpawnByName,
             VSNoSpawnDelay,
+            VSBoatsNotInWater,
             VSAddon,
             VSCompacts,
             VSSedans,

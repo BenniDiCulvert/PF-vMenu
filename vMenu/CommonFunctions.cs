@@ -1545,6 +1545,15 @@ namespace vMenuClient
                 return 0;
             }
 
+            if (IsThisModelABoat(veh.Hash) || IsThisModelAJetski(veh.Hash) || veh.Class == (int)VehicleClass.Boats)
+            {
+                if (!(IsAllowed(Permission.VSBoatsNotInWater) || Game.PlayerPed.IsSwimming || Game.PlayerPed.IsSwimmingUnderWater))
+                {
+                    Notify.Error("You can only spawn boats when swimming.");
+                    return 0;
+                }
+            }
+
             if (string.IsNullOrEmpty(saveName) && withSavedModifications && IsAllowed(Permission.VOSaveMods))
             {
                 var maybeVehicleInfo = StorageManager.TryGetSavedVehicleMods(veh.Shortname);
