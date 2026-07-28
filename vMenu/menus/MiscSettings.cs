@@ -189,8 +189,10 @@ namespace vMenuClient.menus
             var rotationAxis = new MenuListItem("Rotation Axis", rotationAxiss.ToList(), 2, "Sets the axis around which to rotate the entity.");
             var rotationSnaps = new float[] { 1f, 5f, 10f, 15f, 45f, 90f };
             var rotationSnap = new MenuListItem("Rotation Snap", rotationSnaps.Select(r => $"{r}°").ToList(), 3, "Sets the rotation snap amount when rotating the entity.");
+            var useCameraCoordinateSystem = new MenuCheckboxItem("Use Camera Coordinate System", "If enabled, the object will be placed according to a coordinate system defined by the camera view direction. Otherwise the global coordinate system is used.", EntitySpawner.UseCameraCoordinateSystem);
+            var rotationRelativeToObject = new MenuCheckboxItem("Rotation Relative To Object", "If enabled, rotations will be relative to the object's coordinate system. Otherwise they are relative to the global coordinate system.", EntitySpawner.RotationRelativeToObject);
             var resetRotation = new MenuItem("Reset Rotation", "Reset the rotation");
-            var spawnEntityOnGround = new MenuCheckboxItem("Place On Ground", "If checked, the entity will be placed on the ground.", true);
+            var spawnEntityOnGround = new MenuCheckboxItem("Place On Ground", "If enabled, the entity will be placed on the ground.", true);
             var surfaceAlignments = new List<string> { "Once", "Continuously" };
             var alignEntityToSurface = new MenuListItem(
                 "Align To Surface",
@@ -198,8 +200,10 @@ namespace vMenuClient.menus
                 0,
                 "If set to \"Once\", clicking this item will align the entity to the surface. If set to \"Continuously\", the item will be continuously aligned to the surface. Note that this overrides any custom pitch or roll.");
             var distances = new float[] { 5f, 10f, 20f, 30f, 40f, 50f, 100f, 200f, 300f, 400f, 500f };
-            var entityDistances = new MenuListItem("Entity Distance", distances.Select(d => $"{d}").ToList(), 2, "Sets the distance of the entity you're placing.");
-            entityDistances.Enabled = false;
+            var entityDistances = new MenuListItem("Entity Distance", distances.Select(d => $"{d}").ToList(), 2, "Sets the distance of the entity you're placing.")
+            {
+                Enabled = false
+            };
             var spawnNewEntity = new MenuItem("Spawn New Entity", "Spawns entity into the world and lets you set its position and rotation");
             var confirmEntityPosition = new MenuItem("Confirm Entity Position", "Stops placing entity and sets it at it current location.");
             var confirmAndDuplicate = new MenuItem("Confirm Entity Position And Duplicate", "Stops placing entity and sets it at it current location and creates new one to place.");
@@ -581,6 +585,8 @@ namespace vMenuClient.menus
                 entitySpawnerMenu.AddMenuItem(rotationAxis);
                 entitySpawnerMenu.AddMenuItem(rotationSnap);
                 entitySpawnerMenu.AddMenuItem(resetRotation);
+                entitySpawnerMenu.AddMenuItem(rotationRelativeToObject);
+                entitySpawnerMenu.AddMenuItem(useCameraCoordinateSystem);
                 entitySpawnerMenu.AddMenuItem(spawnEntityOnGround);
                 entitySpawnerMenu.AddMenuItem(alignEntityToSurface);
                 entitySpawnerMenu.AddMenuItem(entityDistances);
@@ -721,6 +727,14 @@ namespace vMenuClient.menus
                         EntitySpawner.PlaceOnGround = checked_;
                         entityDistances.Enabled = !checked_;
                         alignEntityToSurface.Enabled = checked_;
+                    }
+                    else if (item == rotationRelativeToObject)
+                    {
+                        EntitySpawner.RotationRelativeToObject = checked_;
+                    }
+                    else if (item == useCameraCoordinateSystem)
+                    {
+                        EntitySpawner.UseCameraCoordinateSystem = checked_;
                     }
                 };
             }
