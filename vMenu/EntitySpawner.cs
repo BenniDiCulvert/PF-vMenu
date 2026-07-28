@@ -565,5 +565,53 @@ namespace vMenuClient
 
             await Task.FromResult(0);
         }
+
+        internal static void DrawCoordinateLine(Vector3 direction, Vector3 objPos, Quaternion rotation, int red, int green, int blue)
+        {
+            var rotatedDirection = Vector3.Normalize(Vector3.Transform(direction, rotation));
+            var start = objPos - rotatedDirection;
+            var end = objPos + rotatedDirection;
+
+            DrawLine(
+                start.X,
+                start.Y,
+                start.Z,
+                end.X,
+                end.Y,
+                end.Z,
+                red,
+                green,
+                blue,
+                200);
+        }
+
+        [Tick]
+        internal async Task DrawCoordinateSystem()
+        {
+            if (!Active || CurrentEntity == null || !CurrentEntity.Exists())
+            {
+                return;
+            }
+
+            Vector3 right = new Vector3(1, 0, 0);
+            Vector3 forward = new Vector3(0, 1, 0);
+            Vector3 up = new Vector3(0, 0, 1);
+
+            var pos = CurrentEntity.Position;
+            var rotation = RotationRelativeToObject ? PlacementRotation : Quaternion.Identity;
+            rotation = GetObjectRelativeQuatIfNeeded(rotation);
+            rotation = CameraCoordinateSystemQuatIfNeeded * rotation;
+
+            void DrawCoordinateLine(Vector3 direction, int red, int green, int blue)
+            {
+                EntitySpawner.DrawCoordinateLine(direction, pos, rotation, red, green, blue);
+            }
+
+            DrawCoordinateLine(right, 255, 0, 0);
+            DrawCoordinateLine(forward, 0, 255, 0);
+            DrawCoordinateLine(up, 0, 0, 255);
+
+            await Task.FromResult(0);
+        }
     }
 }
