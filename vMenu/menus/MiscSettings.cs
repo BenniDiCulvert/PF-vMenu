@@ -75,7 +75,6 @@ namespace vMenuClient.menus
         internal int LastTimeCycleModifierStrength { get; private set; } = UserDefaults.MiscLastTimeCycleModifierStrength;
 
         private static float entitySpawnerRotationSnap = 15f;
-        private static EntitySpawner.RotationAxis entitySpawnerRotationAxisSelected = EntitySpawner.RotationAxis.Yaw;
 
         /// <summary>
         /// The current language used by the player.
@@ -185,12 +184,13 @@ namespace vMenuClient.menus
             // Entity spawner
             var spawnNetworkedEntities = new MenuCheckboxItem("Spawn Networked Entities", "If enabled spawns networked entities. Otherwise local entities are spawned. ~y~Networked entities are limited! Spawning too many, the server will (silently) fail to properly keep track of them!~s~");
             var spawnDynamicEntities = new MenuCheckboxItem("Spawn Dynamic Entities", "If enabled spawns dynamic (movable) entities. Otherwise static (frozen) entities are spawned.", false);
+            var fixEntityPosition = new MenuCheckboxItem("Fix Entity Position", "If enabled, the object does not move and rotate with the camera.", false);
             var rotationAxiss = Enum.GetNames(typeof(EntitySpawner.RotationAxis));
             var rotationAxis = new MenuListItem("Rotation Axis", rotationAxiss.ToList(), 2, "Sets the axis around which to rotate the entity.");
             var rotationSnaps = new float[] { 1f, 5f, 10f, 15f, 45f, 90f };
             var rotationSnap = new MenuListItem("Rotation Snap", rotationSnaps.Select(r => $"{r}°").ToList(), 3, "Sets the rotation snap amount when rotating the entity.");
-            var useCameraCoordinateSystem = new MenuCheckboxItem("Use Camera Coordinate System", "If enabled, the object will be placed according to a coordinate system defined by the camera view direction. Otherwise the global coordinate system is used.", EntitySpawner.UseCameraCoordinateSystem);
-            var rotationRelativeToObject = new MenuCheckboxItem("Rotation Relative To Object", "If enabled, rotations will be relative to the object's coordinate system. Otherwise they are relative to the global coordinate system.", EntitySpawner.RotationRelativeToObject);
+            var rotationRelativeToChoices = Enum.GetNames(typeof(EntitySpawner.RotationReference)).ToList();
+            var rotationRelativeTo = new MenuListItem("Rotation Relative To", rotationRelativeToChoices, (int)EntitySpawner.RotationReference_, "The reference coordinate system rotations will be relative to.");
             var resetRotation = new MenuItem("Reset Rotation", "Reset the rotation");
             var spawnEntityOnGround = new MenuCheckboxItem("Place On Ground", "If enabled, the entity will be placed on the ground.", true);
             var surfaceAlignments = new List<string> { "Once", "Continuously" };
@@ -199,15 +199,15 @@ namespace vMenuClient.menus
                 surfaceAlignments,
                 0,
                 "If set to \"Once\", clicking this item will align the entity to the surface. If set to \"Continuously\", the item will be continuously aligned to the surface. Note that this overrides any custom pitch or roll.");
-            var distances = new float[] { 5f, 10f, 20f, 30f, 40f, 50f, 100f, 200f, 300f, 400f, 500f };
-            var entityDistances = new MenuListItem("Entity Distance", distances.Select(d => $"{d}").ToList(), 2, "Sets the distance of the entity you're placing.")
+            var entityDistanceChoices = new float[] { 5f, 10f, 20f, 30f, 40f, 50f, 100f, 200f, 300f, 400f, 500f };
+            var entityDistance = new MenuListItem("Entity Distance", entityDistanceChoices.Select(d => $"{d}").ToList(), 2, "Sets the distance of the entity you're placing.")
             {
                 Enabled = false
             };
-            var spawnNewEntity = new MenuItem("Spawn New Entity", "Spawns entity into the world and lets you set its position and rotation");
-            var confirmEntityPosition = new MenuItem("Confirm Entity Position", "Stops placing entity and sets it at it current location.");
-            var confirmAndDuplicate = new MenuItem("Confirm Entity Position And Duplicate", "Stops placing entity and sets it at it current location and creates new one to place.");
-            var cancelEntity = new MenuItem("Cancel", "Deletes current entity and cancels its placement");
+            var spawnNewEntity = new MenuItem("Spawn New Entity", "Spawns a new entity into the world and lets you set its position and rotation.");
+            var confirmEntityPosition = new MenuItem("Confirm Entity Position", "Stops placing the entity, and sets it at its current location.");
+            var confirmAndDuplicate = new MenuItem("Confirm Entity Position And Duplicate", "Stops placing the entity, sets it at its current location, and creates new one to place.");
+            var cancelEntity = new MenuItem("Cancel", "Deletes the entity and cancels its placement.");
             var copySpawnedToClipboard = new MenuItem("Copy To Clipboard", "Copy spawned entity info to clipboard.");
             var removeLastSpawnedEntity = new MenuItem("Undo Place", "Undo the placement of entities in reverse order.");
             var removeSpawnedEntities = new MenuItem("~y~Remove All~s~", "Deletes all entities placed by all players.");
@@ -580,48 +580,61 @@ namespace vMenuClient.menus
                 developerToolsMenu.AddMenuItem(entSpawnerMenuBtn);
                 MenuController.BindMenuItem(developerToolsMenu, entitySpawnerMenu, entSpawnerMenuBtn);
 
-                entitySpawnerMenu.AddMenuItem(spawnNetworkedEntities);
-                entitySpawnerMenu.AddMenuItem(spawnDynamicEntities);
+                entitySpawnerMenu.AddMenuItem(spawnNewEntity);
+                entitySpawnerMenu.AddMenuItem(spawnEntityOnGround);
+                entitySpawnerMenu.AddMenuItem(entityDistance);
+                entitySpawnerMenu.AddMenuItem(alignEntityToSurface);
+                entitySpawnerMenu.AddMenuItem(fixEntityPosition);
+                entitySpawnerMenu.AddMenuItem(resetRotation);
+                entitySpawnerMenu.AddMenuItem(rotationRelativeTo);
                 entitySpawnerMenu.AddMenuItem(rotationAxis);
                 entitySpawnerMenu.AddMenuItem(rotationSnap);
-                entitySpawnerMenu.AddMenuItem(resetRotation);
-                entitySpawnerMenu.AddMenuItem(rotationRelativeToObject);
-                entitySpawnerMenu.AddMenuItem(useCameraCoordinateSystem);
-                entitySpawnerMenu.AddMenuItem(spawnEntityOnGround);
-                entitySpawnerMenu.AddMenuItem(alignEntityToSurface);
-                entitySpawnerMenu.AddMenuItem(entityDistances);
-                entitySpawnerMenu.AddMenuItem(spawnNewEntity);
                 entitySpawnerMenu.AddMenuItem(confirmEntityPosition);
                 entitySpawnerMenu.AddMenuItem(confirmAndDuplicate);
                 entitySpawnerMenu.AddMenuItem(cancelEntity);
                 entitySpawnerMenu.AddMenuItem(copySpawnedToClipboard);
                 entitySpawnerMenu.AddMenuItem(removeLastSpawnedEntity);
+                entitySpawnerMenu.AddMenuItem(spawnNetworkedEntities);
+                entitySpawnerMenu.AddMenuItem(spawnDynamicEntities);
                 entitySpawnerMenu.AddMenuItem(removeSpawnedEntities);
+
+                void RotateEntity(EntitySpawner.RotationDirection direction)
+                {
+                    EntitySpawner.RotateEntity(
+                        direction,
+                        entitySpawnerRotationSnap);
+                }
 
                 var cmdName = (string cmd) => $"{GetSettingsString(Setting.vmenu_individual_server_id)}vMenu:entitySpawer:{cmd}";
                 var rotateCmdName = (string dir) => cmdName($"rotate_{dir}");
                 RegisterKeyMapping(rotateCmdName("forwd"), "vMenu Rot. Entity Forwd.", "keyboard", "Numpad1");
                 RegisterCommand(rotateCmdName("forwd"), new Action<int, List<object>, string>((source, args, raw) =>
                 {
-                    EntitySpawner.RotateEntity(
-                        entitySpawnerRotationAxisSelected,
-                        EntitySpawner.RotationDirection.Forward,
-                        entitySpawnerRotationSnap);
+                    RotateEntity(EntitySpawner.RotationDirection.Forward);
                 }), false);
                 RegisterKeyMapping(rotateCmdName("backwd"), "vMenu Rot. Entity Backwd.", "keyboard", "Numpad3");
                 RegisterCommand(rotateCmdName("backwd"), new Action<int, List<object>, string>((source, args, raw) =>
                 {
-                    EntitySpawner.RotateEntity(
-                        entitySpawnerRotationAxisSelected,
-                        EntitySpawner.RotationDirection.Backward,
-                        entitySpawnerRotationSnap);
+                    RotateEntity(EntitySpawner.RotationDirection.Backward);
                 }), false);
                 RegisterKeyMapping(cmdName("cycleRotationAxis"), "vMenu Cycle Entity Rot. Axis", "keyboard", "Numpad0");
                 RegisterCommand(cmdName("cycleRotationAxis"), new Action<int, List<object>, string>((source, args, raw) =>
                 {
                     var index = rotationAxis.ListIndex = (rotationAxis.ListIndex + 1) % rotationAxis.ItemsCount;
-                    entitySpawnerRotationAxisSelected = (EntitySpawner.RotationAxis)index;
+                    EntitySpawner.RotationAxis_ = (EntitySpawner.RotationAxis)index;
                 }), false);
+
+                void SetIsEntityFixed(bool value)
+                {
+                    fixEntityPosition.Checked = value;
+                    EntitySpawner.IsEntityPositionFixed = value;
+                    EntitySpawner.RotateEntityWithCameraYaw = !value;
+                }
+
+                void ResetMenuBeforeAfterPlace()
+                {
+                    SetIsEntityFixed(false);
+                }
 
                 entitySpawnerMenu.OnItemSelect += async (sender, item, index) =>
                 {
@@ -636,6 +649,7 @@ namespace vMenuClient.menus
                             Notify.Error("You are already placing one entity, set its location or cancel and try again!");
                             return;
                         }
+                        ResetMenuBeforeAfterPlace();
 
                         var result = await GetUserInput(windowTitle: "Enter model name or hash", 100);
 
@@ -651,6 +665,7 @@ namespace vMenuClient.menus
                         if (EntitySpawner.CurrentEntity != null)
                         {
                             EntitySpawner.FinishPlacement(item == confirmAndDuplicate);
+                            ResetMenuBeforeAfterPlace();
                         }
                         else
                         {
@@ -662,6 +677,7 @@ namespace vMenuClient.menus
                         if (EntitySpawner.CurrentEntity != null)
                         {
                             EntitySpawner.CurrentEntity.Delete();
+                            ResetMenuBeforeAfterPlace();
                         }
                         else
                         {
@@ -683,13 +699,17 @@ namespace vMenuClient.menus
                 };
                 entitySpawnerMenu.OnListIndexChange += (sender, item, oldIndex, newIndex, itemIndex) =>
                 {
-                    if (item == entityDistances)
+                    if (item == entityDistance)
                     {
-                        EntitySpawner.PlacementDistance = distances[newIndex];
+                        EntitySpawner.PlacementDistance = entityDistanceChoices[newIndex];
                     }
                     else if (item == rotationAxis)
                     {
-                        entitySpawnerRotationAxisSelected = (EntitySpawner.RotationAxis)newIndex;
+                        EntitySpawner.RotationAxis_ = (EntitySpawner.RotationAxis)newIndex;
+                    }
+                    else if (item == rotationRelativeTo)
+                    {
+                        EntitySpawner.RotationReference_ = (EntitySpawner.RotationReference)newIndex;
                     }
                     else if (item == rotationSnap)
                     {
@@ -725,16 +745,12 @@ namespace vMenuClient.menus
                     else if (item == spawnEntityOnGround)
                     {
                         EntitySpawner.PlaceOnGround = checked_;
-                        entityDistances.Enabled = !checked_;
+                        entityDistance.Enabled = !checked_;
                         alignEntityToSurface.Enabled = checked_;
                     }
-                    else if (item == rotationRelativeToObject)
+                    else if (item == fixEntityPosition)
                     {
-                        EntitySpawner.RotationRelativeToObject = checked_;
-                    }
-                    else if (item == useCameraCoordinateSystem)
-                    {
-                        EntitySpawner.UseCameraCoordinateSystem = checked_;
+                        SetIsEntityFixed(checked_);
                     }
                 };
             }

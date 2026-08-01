@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
@@ -26,6 +27,13 @@ namespace vMenuClient
             return true;
         }
 
+        public enum RotationReference
+        {
+            Global,
+            Camera,
+            Object,
+        }
+
         public enum RotationAxis
         {
             Pitch,
@@ -44,53 +52,36 @@ namespace vMenuClient
         public static float PlacementDistance { get; set; } = 20f;
         public static Quaternion PlacementRotation { get; set; } = Quaternion.Identity;
 
-        private static bool useCameraCoordinateSystem = true;
-        public static bool UseCameraCoordinateSystem
+        public static bool IsEntityPositionFixed { get; set; } = false;
+
+        public static RotationAxis RotationAxis_ { get; set; } = RotationAxis.Yaw;
+        public static RotationReference RotationReference_ { get; set; } = RotationReference.Object;
+
+        private static Quaternion? lastRotateEntityWithCameraYawQuat = null;
+        private static bool rotateEntityWithCameraYaw = true;
+        public static bool RotateEntityWithCameraYaw
         {
             get
             {
-                return useCameraCoordinateSystem;
+                return rotateEntityWithCameraYaw;
             }
             set
             {
-                if (value != useCameraCoordinateSystem)
+                if (value != rotateEntityWithCameraYaw)
                 {
+                    lastRotateEntityWithCameraYawQuat = value ? null : CameraCoordinateSystemQuat;
+
                     var adjustQuat = CameraCoordinateSystemQuat;
-                    if (value == RotationRelativeToObject)
+                    if (!value)
                     {
                         adjustQuat = Quaternion.Invert(adjustQuat);
                     }
 
-                    if (RotationRelativeToObject)
-                    {
-                        PlacementRotation = adjustQuat * PlacementRotation;
-                    }
-                    else
-                    {
-                        PlacementRotation = PlacementRotation * adjustQuat;
-                    }
+                    PlacementRotation = PlacementRotation * adjustQuat;
                 }
-                useCameraCoordinateSystem = value;
+                rotateEntityWithCameraYaw = value;
             }
         }
-
-        private static bool rotationRelativeToObject = false;
-        public static bool RotationRelativeToObject
-        {
-            get
-            {
-                return rotationRelativeToObject;
-            }
-            set
-            {
-                if (value != rotationRelativeToObject)
-                {
-                    PlacementRotation = Quaternion.Invert(PlacementRotation);
-                }
-                rotationRelativeToObject = value;
-            }
-        }
-
 
         public static bool SpawnDynamic { get; set; }
 
@@ -304,37 +295,68 @@ namespace vMenuClient
             CommonFunctions.CopyToClipboard(sb.ToString());
         }
 
+        private static Quaternion RotationRollPitchYawDegQuat(Vector3 rot)
+        {
+            // Why are we dividing by 18.23684*pi you ask: I honestly don't know. 180.0*pi as we would normally do for
+            // deg -> rad does not work. 18.23684 was simply determined by trial and error.
+            const float CORRECTION_FACTOR = 1f / (float)(18.23684 * Math.PI);
+
+            rot *= CORRECTION_FACTOR;
+
+            // Quaternion.RotationYawPitchRoll name/param order is bogus, it is actually pitch (X), roll (Y), yaw (Z)
+            return Quaternion.Normalize(Quaternion.RotationYawPitchRoll(rot.X, rot.Y, rot.Z));
+        }
+
         public static Quaternion RotationToQuaternion(RotationAxis axis, RotationDirection direction, float amount)
         {
-            // Why are we dividing by 18.23684 * pi you ask: I honestly don't know. 180*pi as we would normally do for
-            // deg -> rad does not work. 18.23684 was simply determined by trial and error.
-            amount = amount * (direction == RotationDirection.Forward ? 1f : -1f) / (float)(18.23684 * Math.PI);
-
-            Quaternion rotation = Quaternion.Identity;
+            amount = amount * (direction == RotationDirection.Forward ? 1f : -1f);
+            Vector3 rot = new Vector3();
             switch (axis)
             {
-                case RotationAxis.Pitch:
-                    rotation = Quaternion.RotationYawPitchRoll(0, amount, 0);
-                    break;
                 case RotationAxis.Roll:
-                    rotation = Quaternion.RotationYawPitchRoll(amount, 0, 0);
+                    rot = new Vector3(amount, 0, 0);
+                    break;
+                case RotationAxis.Pitch:
+                    rot = new Vector3(0, amount, 0);
                     break;
                 case RotationAxis.Yaw:
-                    rotation = Quaternion.RotationYawPitchRoll(0, 0, amount);
+                    rot = new Vector3(0, 0, amount);
                     break;
             }
 
-            return rotation;
+            return RotationRollPitchYawDegQuat(rot);
         }
 
-        public static void RotateEntity(RotationAxis axis, RotationDirection direction, float amount)
+        public static void RotateEntity(RotationDirection direction, float amount)
         {
-            PlacementRotation *= RotationToQuaternion(axis, direction, amount);
+            var rot = PlacementRotation;
+            rot = rot * Quaternion.Invert(CameraCoordinateSystemQuatIfNeeded);
+
+            var change = RotationToQuaternion(RotationAxis_, direction, amount);
+            switch (RotationReference_)
+            {
+                case RotationReference.Global:
+                    rot = rot * Quaternion.Invert(change);
+                    break;
+                case RotationReference.Camera:
+                    rot = rot * CameraCoordinateSystemQuat * Quaternion.Invert(change) * Quaternion.Invert(CameraCoordinateSystemQuat);
+                    break;
+                case RotationReference.Object:
+                    rot = change * rot;
+                    break;
+            }
+            rot = rot * CameraCoordinateSystemQuatIfNeeded;
+
+            PlacementRotation = rot;
         }
 
         public static void ResetRotation()
         {
-            PlacementRotation = Quaternion.Identity;
+            PlacementRotation = RotateEntityWithCameraYaw
+                ? Quaternion.Identity
+                : Quaternion.Invert(lastRotateEntityWithCameraYawQuat.HasValue
+                ? lastRotateEntityWithCameraYawQuat.Value
+                : CameraCoordinateSystemQuat);
         }
         #endregion
 
@@ -366,7 +388,7 @@ namespace vMenuClient
         /// </summary>
         /// <param name="rotation">Input rotation vector</param>
         /// <returns>Output direction vector</returns>
-        private Vector3 RotationToDirection(Vector3 rotation)
+        private static Vector3 RotationToDirection(Vector3 rotation)
         {
             var adj = new Vector3(
                 (float)Math.PI / 180f * rotation.X,
@@ -420,7 +442,7 @@ namespace vMenuClient
         {
             get
             {
-                if (!UseCameraCoordinateSystem)
+                if (!RotateEntityWithCameraYaw)
                 {
                     return Quaternion.Identity;
                 }
@@ -429,34 +451,17 @@ namespace vMenuClient
             }
         }
 
-        public static Quaternion GetObjectRelativeQuatIfNeeded(Quaternion rot)
-        {
-            if (!RotationRelativeToObject)
-            {
-                return Quaternion.Invert(rot);
-            }
-            return rot;
-        }
-
         public static Quaternion FinalEntityRotationQuat
         {
             get
             {
-                var rot = PlacementRotation;
-                rot = GetObjectRelativeQuatIfNeeded(rot);
-                rot = CameraCoordinateSystemQuatIfNeeded * rot;
-
-                return rot;
+                return CameraCoordinateSystemQuatIfNeeded * Quaternion.Invert(PlacementRotation);
             }
         }
 
         public static Quaternion ExtractPlacementRotation(Quaternion finalRotation)
         {
-            var rot = finalRotation;
-            rot = Quaternion.Invert(CameraCoordinateSystemQuatIfNeeded) * rot;
-            rot = GetObjectRelativeQuatIfNeeded(rot);
-
-            return rot;
+            return Quaternion.Invert(finalRotation) * CameraCoordinateSystemQuatIfNeeded;
         }
 
         public static Quaternion GetEntityQuat(Entity entity)
@@ -541,9 +546,11 @@ namespace vMenuClient
                 SetEntityCollision(handle, false, false);
                 SetEntityAlpha(handle, (int)(255 * 0.4), 0);
 
-                var newPosition = GetCoordsPlayerIsLookingAt();
-
-                CurrentEntity.Position = newPosition;
+                if (!IsEntityPositionFixed)
+                {
+                    var newPosition = GetCoordsPlayerIsLookingAt();
+                    CurrentEntity.Position = newPosition;
+                }
 
                 if (PlaceOnGround && AlignToSurfaceContinuously && CurrentEntity.HeightAboveGround < 3.0f)
                 {
@@ -566,7 +573,7 @@ namespace vMenuClient
             await Task.FromResult(0);
         }
 
-        internal static void DrawCoordinateLine(Vector3 direction, Vector3 objPos, Quaternion rotation, int red, int green, int blue)
+        internal static void DrawCoordinateLine(Vector3 direction, Vector3 objPos, Quaternion rotation, int red, int green, int blue, int alpha)
         {
             var rotatedDirection = Vector3.Normalize(Vector3.Transform(direction, rotation));
             var start = objPos - rotatedDirection;
@@ -582,7 +589,7 @@ namespace vMenuClient
                 red,
                 green,
                 blue,
-                200);
+                alpha);
         }
 
         [Tick]
@@ -598,18 +605,33 @@ namespace vMenuClient
             Vector3 up = new Vector3(0, 0, 1);
 
             var pos = CurrentEntity.Position;
-            var rotation = RotationRelativeToObject ? PlacementRotation : Quaternion.Identity;
-            rotation = GetObjectRelativeQuatIfNeeded(rotation);
-            rotation = CameraCoordinateSystemQuatIfNeeded * rotation;
-
-            void DrawCoordinateLine(Vector3 direction, int red, int green, int blue)
+            var rotation = new Quaternion();
+            switch (RotationReference_)
             {
-                EntitySpawner.DrawCoordinateLine(direction, pos, rotation, red, green, blue);
+                case RotationReference.Camera:
+                    rotation = CameraCoordinateSystemQuat;
+                    break;
+                case RotationReference.Global:
+                    rotation = Quaternion.Identity;
+                    break;
+                case RotationReference.Object:
+                    rotation = CameraCoordinateSystemQuatIfNeeded * Quaternion.Invert(PlacementRotation);
+                    break;
             }
 
-            DrawCoordinateLine(right, 255, 0, 0);
-            DrawCoordinateLine(forward, 0, 255, 0);
-            DrawCoordinateLine(up, 0, 0, 255);
+            void DrawCoordinateLine(Vector3 direction, int red, int green, int blue, int alpha)
+            {
+                EntitySpawner.DrawCoordinateLine(direction, pos, rotation, red, green, blue, alpha);
+            }
+
+            int GetAxisAlpha(RotationAxis axis)
+            {
+                return axis == RotationAxis_ ? 255 : 127;
+            }
+
+            DrawCoordinateLine(right, 255, 0, 0, GetAxisAlpha(RotationAxis.Pitch));
+            DrawCoordinateLine(forward, 0, 255, 0, GetAxisAlpha(RotationAxis.Roll));
+            DrawCoordinateLine(up, 0, 0, 255, GetAxisAlpha(RotationAxis.Yaw));
 
             await Task.FromResult(0);
         }
