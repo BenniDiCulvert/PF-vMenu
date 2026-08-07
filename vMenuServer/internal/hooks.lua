@@ -30,18 +30,19 @@ local function addHookHandler(hookFn, hooksGroup, hookName)
     local eventName = "vMenu:Hooks:" .. hookPath
 
     AddEventHandler(eventName, function(requestId, argsJson)
-        debugHookCall(hookPath, "enter")
-
         local args = json.decode(argsJson or "{}")
 
-        Citizen.CreateThreadNow(function()
+        Citizen.CreateThread(function()
+            debugHookCall(hookPath, "enter")
+            local start = GetGameTimer()
             local result = hookFn(args)
             if hookResultDebuggingPattern ~= "" and string.find(hookResultDebuggingPattern, hookPath) then
                 print(hookPath .. ":\n" ..
                     "  Args: " .. dumpTable(args) .. "\n" ..
                     "  Result: " .. dumpTable(result))
             end
-            debugHookCall(hookPath, "exit")
+            local timeStr = string.format("%.2f", (GetGameTimer() - start) / 1000.0)
+            debugHookCall(hookPath, "exit (" .. timeStr .. " ms)")
             TriggerEvent("vMenu:RequestManager:Response", requestId, json.encode(result or {}))
         end)
     end)

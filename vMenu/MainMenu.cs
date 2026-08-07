@@ -693,8 +693,15 @@ namespace vMenuClient
         /// It triggers the menu creations, setting of initial flags like PVP, player stats,
         /// and triggers the creation of Tick functions from the FunctionsController class.
         /// </summary>
+        public static bool IsPostPermissionsSetupComplete { get; private set; } = false;
+
         private static async Task PostPermissionsSetup()
         {
+            if (IsPostPermissionsSetupComplete)
+            {
+                return;
+            }
+
             switch (GetSettingsInt(Setting.vmenu_pvp_mode))
             {
                 case 1:
@@ -721,6 +728,7 @@ namespace vMenuClient
                     return true;
                 }
 
+                IsPostPermissionsSetupComplete = true;
                 return false;
             }
 
@@ -790,6 +798,7 @@ namespace vMenuClient
                 StatSetFloat((uint)GetHashKey("MP0_PLAYER_MENTAL_STATE"), 0f, true);    // Mental State
             }
 
+            IsPostPermissionsSetupComplete = true;
             TriggerEvent("vMenu:SetupTickFunctions");
         }
 

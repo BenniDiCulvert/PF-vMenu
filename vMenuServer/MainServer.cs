@@ -16,6 +16,29 @@ using static vMenuShared.ConfigManager;
 
 namespace vMenuServer
 {
+    public static class PlayerExtensions
+    {
+        public static void TriggerEventDynamicLatent(this Player player, string eventName, params object[] args)
+        {
+            // 512 KiB
+            const int LATENT_SIZE = 512 * 1024;
+
+            var argSize = args.Sum(x =>
+            {
+                var s = x as string;
+                return s == null ? 8 : s.Length;
+            });
+
+            if (argSize < LATENT_SIZE)
+            {
+                player.TriggerEvent(eventName, args);
+            }
+            else
+            {
+                player.TriggerLatentEvent(eventName, LATENT_SIZE, args);
+            }
+        }
+    }
 
     public static class DebugLog
     {
@@ -105,6 +128,91 @@ namespace vMenuServer
         }
     }
 
+    public class BoundedTaskScheduler
+    {
+        private sealed class ScheduledTask
+        {
+            public Func<Task> Factory { get; }
+            public Task RunningTask { get; set; }
+
+            public TaskCompletionSource<object> Completion { get; } =
+                new TaskCompletionSource<object>();
+
+            public ScheduledTask(Func<Task> factory)
+            {
+                Factory = factory;
+            }
+        }
+
+        private readonly Queue<ScheduledTask> pendingTasks = new();
+        private readonly List<ScheduledTask> activeTasks = new();
+        private readonly int maxConcurrency;
+
+        public BoundedTaskScheduler(int maxConcurrency, string name = null)
+        {
+            name = string.IsNullOrEmpty(name) ? "" : $"{name} ";
+            Debug.WriteLine($"Max {name}concurrency: {maxConcurrency}");
+
+            if (maxConcurrency < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxConcurrency));
+            }
+
+            this.maxConcurrency = maxConcurrency;
+        }
+
+        public Task ScheduleTask(Func<Task> taskFactory)
+        {
+            if (taskFactory == null)
+            {
+                throw new ArgumentNullException(nameof(taskFactory));
+            }
+
+            var scheduledTask = new ScheduledTask(taskFactory);
+            pendingTasks.Enqueue(scheduledTask);
+            return scheduledTask.Completion.Task;
+        }
+
+        private static async Task RunScheduledTask(ScheduledTask scheduledTask)
+        {
+            try
+            {
+                await scheduledTask.Factory();
+                scheduledTask.Completion.TrySetResult(null);
+            }
+            catch (Exception exception)
+            {
+                scheduledTask.Completion.TrySetException(exception);
+            }
+        }
+
+        public void Tick()
+        {
+            for (var i = activeTasks.Count - 1; i >= 0; i--)
+            {
+                if (activeTasks[i].RunningTask.IsCompleted)
+                {
+                    activeTasks.RemoveAt(i);
+                }
+            }
+
+            while (activeTasks.Count < maxConcurrency && pendingTasks.Count > 0)
+            {
+                var scheduledTask = pendingTasks.Dequeue();
+
+                // Add it before invoking the factory because an async method may run synchronously until its first
+                // incomplete await.
+                activeTasks.Add(scheduledTask);
+                scheduledTask.RunningTask = RunScheduledTask(scheduledTask);
+
+                if (scheduledTask.RunningTask.IsCompleted)
+                {
+                    activeTasks.Remove(scheduledTask);
+                }
+            }
+        }
+    }
+
     public class MainServer : BaseScript
     {
         #region vars
@@ -112,6 +220,17 @@ namespace vMenuServer
         public static bool DebugMode = GetResourceMetadata(GetCurrentResourceName(), "server_debug_mode", 0) == "true";
 
         public static string Version { get { return GetResourceMetadata(GetCurrentResourceName(), "version", 0); } }
+
+        private static int GetBoundedTaskSchedulerCount(Setting setting, int defaultCount)
+        {
+            int count = GetSettingsInt(setting);
+            return count <= 0 ? defaultCount : count;
+        }
+
+        public static BoundedTaskScheduler PermissionTaskScheduler { get; set; } =
+            new BoundedTaskScheduler(GetBoundedTaskSchedulerCount(Setting.vmenu_max_concurrent_player_setup_events, 5), "player setup");
+        public static BoundedTaskScheduler KvsTaskScheduler { get; set; } =
+            new BoundedTaskScheduler(GetBoundedTaskSchedulerCount(Setting.vmenu_max_concurrent_remote_kvs_events, 10), "remove KVS");
 
         private readonly List<string> CloudTypes = new()
         {
@@ -224,7 +343,10 @@ namespace vMenuServer
                             });
                             callback.InvokeAsCallback(player, data);
                         }));
-                        EventHandlers.Add("vMenu:RequestPermissions", new Action<Player>(PermissionsManager.SetPermissionsForPlayer));
+                        EventHandlers.Add("vMenu:RequestPermissions", new Action<Player>(([FromSource] player) =>
+                        {
+                            PermissionTaskScheduler.ScheduleTask(() => PermissionsManager.SetPermissionsForPlayer(player));
+                        }));
                         EventHandlers.Add("vMenu:RequestServerState", new Action<Player>(RequestServerStateFromPlayer));
 
                         // check addons file for errors
@@ -434,6 +556,15 @@ namespace vMenuServer
         }
         #endregion
 
+        [Tick]
+        internal static Task RunBoundedTasks()
+        {
+            PermissionTaskScheduler.Tick();
+            KvsTaskScheduler.Tick();
+
+            return Task.FromResult(0);
+        }
+
         #region Hooks
         public static class Hooks
         {
@@ -469,21 +600,27 @@ namespace vMenuServer
         #endregion
 
         [EventHandler("vMenu:ServerKeyValueStoreRequest")]
-        public async void ReceiveRequest([FromSource] Player player, string json)
+        public void ReceiveRequest([FromSource] Player player, string json)
         {
-            await ClientRemoteKeyValueStore.HandleRequest(player, json);
+            KvsTaskScheduler.ScheduleTask(async () =>
+            {
+                await ClientRemoteKeyValueStore.HandleRequest(player, json);
+            });
         }
 
         [EventHandler("vMenu:SyncUpdatedUsersettings")]
-        public async void SyncUpdatedUsersettingsHandler([FromSource] Player player, string json)
+        public void SyncUpdatedUsersettingsHandler([FromSource] Player player, string json)
         {
-            await RequestManager.Send(
-                Hooks.Usersettings.STORE_FOR_EVENT_NAME,
-                JsonConvert.SerializeObject(new
-                {
-                    player = player.Handle,
-                    settings = JsonConvert.DeserializeObject(json)
-                }));
+            KvsTaskScheduler.ScheduleTask(async () =>
+            {
+                await RequestManager.Send(
+                    Hooks.Usersettings.STORE_FOR_EVENT_NAME,
+                    JsonConvert.SerializeObject(new
+                    {
+                        player = player.Handle,
+                        settings = JsonConvert.DeserializeObject(json)
+                    }));
+            });
         }
 
         private bool VehicleHasPlayerInAnySeat(int vehicle)

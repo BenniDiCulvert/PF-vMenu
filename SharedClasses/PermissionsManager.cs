@@ -9,6 +9,12 @@ using static vMenuShared.ConfigManager;
 using static CitizenFX.Core.Native.API;
 
 using Newtonsoft.Json;
+using System.Threading.Tasks;
+
+
+#if SERVER
+using vMenuServer;
+#endif
 
 namespace vMenuShared
 {
@@ -408,9 +414,11 @@ namespace vMenuShared
             #endregion
         }
 
-        private static HashSet<Permission> GetParentPermissions(Permission permission)
+        private static List<Permission> GetParentPermissions(Permission permission)
         {
-            var parentPermissions = new HashSet<Permission>() { Permission.Everything, permission };
+            // Ensure the ordering described in ParentPermissions!!
+
+            var parentPermissions = new List<Permission>() { Permission.Everything };
             var permStr = permission.ToString();
 
             var permStr2 = permStr.Substring(0, 2);
@@ -429,10 +437,15 @@ namespace vMenuShared
                 }
             }
             // else it's one of the .Everything, .DontKickMe, DontBanMe, NoClip, Staff, etc perms that are not menu specific so do nothing
+
+            parentPermissions.Add(permission);
             return parentPermissions;
         }
 
-        public static readonly Dictionary<Permission, HashSet<Permission>> ParentPermissions = Enum
+        // List of parent permissions for a permission. Parent permissions are (semi-)ordered like so:
+        //   [ Everything, <PermissionGroup>All, <PermissionGroup>.<permission> ]
+        // In particular, the permission itself is the last element in the list of parent permissions.
+        public static readonly Dictionary<Permission, List<Permission>> ParentPermissions = Enum
             .GetValues(typeof(Permission))
             .Cast<Permission>()
             .ToDictionary(p => p, GetParentPermissions);
@@ -519,6 +532,37 @@ namespace vMenuShared
         public static readonly Dictionary<string, Permission> AceNameToPermission = PermissionToAceName
             .ToDictionary(kv => kv.Value, kv => kv.Key);
 
+        public static bool IsAllowed(string permission, Dictionary<string, bool> permissions)
+        {
+            if (AceNameToPermission.TryGetValue(permission, out var builtinPermission))
+            {
+                var parentPermissions = ParentPermissions[builtinPermission];
+                // -1 is this permission itself, so this is already covered by this check
+                for (int i = parentPermissions.Count - 1; i >= 0; i--)
+                {
+                    var parentPermission = parentPermissions[i];
+                    if (permissions.TryGetValue(PermissionToAceName[parentPermission], out var parentAllowed))
+                    {
+                        return parentAllowed;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public static void SetAllAllowedBuiltinsExplicitly(Dictionary<string, bool> explicitlySetPermissions)
+        {
+            foreach (var builtinPermissionAce in AceNameToPermission.Keys)
+            {
+                if (!IsAllowed(builtinPermissionAce, explicitlySetPermissions))
+                {
+                    continue;
+                }
+                explicitlySetPermissions[builtinPermissionAce] = true;
+            }
+        }
+
 #if SERVER
         /// <summary>
         /// Checks if the player is allowed that specific permission.
@@ -537,11 +581,102 @@ namespace vMenuShared
                 .Any(pperm => IsPlayerAceAllowed(source.Handle, PermissionToAceName[pperm]));
         }
 
+        public async static Task<HashSet<Permission>> IsAllowedMultiple(Player source, HashSet<Permission> permissions)
+        {
+            if (source == null)
+            {
+                return new HashSet<Permission>();
+            }
+
+            await BaseScript.Delay(1);
+
+            long numWaits = 0;
+            long numNativeCalls = 0; // just for debug purposes
+            var start = GetGameTimer();
+            var timer = start;
+
+            async Task DelayIfNeeded()
+            {
+                if (GetGameTimer() - timer > 10)
+                {
+                    numWaits++;
+                    await BaseScript.Delay(1);
+                    timer = GetGameTimer(); // update this after the wait
+                }
+            }
+
+            var allowedPerms = new Dictionary<Permission, bool>();
+            foreach (var permission in permissions)
+            {
+                await DelayIfNeeded();
+
+                if (allowedPerms.ContainsKey(permission))
+                {
+                    continue;
+                }
+
+                var isAllowed = false;
+
+                // First loop over all parent perms and check if we already know that one of them is allowed so we can
+                // enable this permissions as well; saves IsPlayerAceAllowed native calls that can become quite
+                // expensive with the amount of permissions vMenu has.
+                foreach (var parentPerm in ParentPermissions[permission])
+                {
+                    if (allowedPerms.ContainsKey(parentPerm))
+                    {
+                        isAllowed = allowedPerms[parentPerm];
+                    }
+
+                    if (isAllowed)
+                    {
+                        break;
+                    }
+                }
+
+                // We don't know of any parent permission that is enabled (yet), so now we need to check via ACE native.
+                if (!isAllowed)
+                {
+                    foreach (var parentPerm in ParentPermissions[permission])
+                    {
+                        // We already know this is not allowed, so no need to double check. Walk down to most specific
+                        // permission that we don't know allowed state yet.
+                        if (allowedPerms.ContainsKey(parentPerm))
+                        {
+                            continue;
+                        }
+
+                        numNativeCalls++;
+                        isAllowed = IsPlayerAceAllowed(source.Handle, PermissionToAceName[parentPerm]);
+
+                        await DelayIfNeeded();
+
+                        allowedPerms[parentPerm] = isAllowed;
+                        if (isAllowed)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                allowedPerms[permission] = isAllowed;
+            }
+
+            var end = GetGameTimer();
+            Debug.WriteLine($"INFO: Fetching permissions for {source.Name} required {numNativeCalls} native calls and took {end - start} ms (waited {numWaits} times)");
+
+            await BaseScript.Delay(1);
+
+            return [.. allowedPerms.Where(p => p.Value).Select(p => p.Key)];
+        }
+
+        public readonly static List<Permission> permissionValues =
+            Enum.GetValues(typeof(Permission)).Cast<Permission>().ToList();
+
         /// <summary>
         /// Sets the permissions for a specific player (checks server side, sends event to client side).
         /// </summary>
         /// <param name="player"></param>
-        public async static void SetPermissionsForPlayer([FromSource] Player player)
+        public async static Task SetPermissionsForPlayer([FromSource] Player player)
         {
             if (player == null)
             {
@@ -565,9 +700,8 @@ namespace vMenuShared
 
             if (!GetSettingsBool(Setting.vmenu_use_permissions))
             {
-                foreach (var p in Enum.GetValues(typeof(Permission)))
+                foreach (var permission in permissionValues)
                 {
-                    var permission = (Permission)p;
                     switch (permission)
                     {
                         // don't allow any of the following permissions if perms are ignored.
@@ -588,24 +722,22 @@ namespace vMenuShared
                     }
                 }
             }
-            else
+            else if (!GetSettingsBool(Setting.vmenu_use_only_hook_permissions))
             {
-                allowedBuiltinPermissions = [.. Enum
-                    .GetValues(typeof(Permission))
-                    .Cast<Permission>()
-                    .Where(p => IsAllowed(p, player))];
+                allowedBuiltinPermissions = await IsAllowedMultiple(player, [.. permissionValues]);
             }
 
             var playerPermissionsJson = await vMenuServer.RequestManager.Send(
                 vMenuServer.MainServer.Hooks.PlayerPermissions.FETCH_FOR_EVENT_NAME,
                 $"{player.Handle}");
             var playerPermissions = JsonConvert.DeserializeObject<Dictionary<string, bool>>(playerPermissionsJson);
+            SetAllAllowedBuiltinsExplicitly(playerPermissions);
 
             var filteredPlayerPermissions = (bool allowed) =>
             {
-                return playerPermissions
+                return new HashSet<string>([.. playerPermissions
                     .Where(kv => kv.Value == allowed)
-                    .Select(kv => kv.Key);
+                    .Select(kv => kv.Key)]);
             };
 
             var allowedPlayerPermissions = filteredPlayerPermissions(true);
@@ -639,7 +771,7 @@ namespace vMenuShared
                 ["usersettingsInfo"] = await vMenuServer.MainServer.Hooks.Usersettings.GetInfoResult,
                 ["usersettings"] = usersettings,
             };
-            player.TriggerEvent("vMenu:SetExtras", JsonConvert.SerializeObject(extras));
+            player.TriggerEventDynamicLatent("vMenu:SetExtras", JsonConvert.SerializeObject(extras));
         }
 #endif
 

@@ -17,10 +17,14 @@ namespace vMenuShared
             // Id for RegisterKeyMapping
             vmenu_individual_server_id,
 
+            vmenu_max_concurrent_remote_kvs_events,
+            vmenu_max_concurrent_player_setup_events,
+
             // General settings
             vmenu_server_name,
             vmenu_menu_subtitle_color,
             vmenu_use_permissions,
+            vmenu_use_only_hook_permissions,
             vmenu_menu_staff_only,
             vmenu_menu_toggle_key,
             vmenu_noclip_toggle_key,

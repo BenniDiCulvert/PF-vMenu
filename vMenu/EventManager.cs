@@ -216,6 +216,15 @@ namespace vMenuClient
             if (firstSpawn)
             {
                 firstSpawn = false;
+
+                const int MAX_SPAWN_DEFAULT_DELAY = 10000;
+
+                var start = (uint)GetGameTimer();
+                while (!MainMenu.IsPostPermissionsSetupComplete && (uint)GetGameTimer() - start <= MAX_SPAWN_DEFAULT_DELAY)
+                {
+                    await Delay(0);
+                }
+
                 if (MainMenu.MiscSettingsMenu != null && MainMenu.MpPedCustomizationMenu != null && MainMenu.MiscSettingsMenu.MiscRespawnDefaultCharacter && !string.IsNullOrEmpty(KeyValueStore.GetString("vmenu_default_character")) && IsAllowed(Permission.PASpawnAsDefault))
                 {
                     await MainMenu.MpPedCustomizationMenu.SpawnThisCharacter(KeyValueStore.GetString("vmenu_default_character"), false);
@@ -342,8 +351,14 @@ namespace vMenuClient
             }
         }
 
+        private bool areExtrasSetup = false;
         private void SetExtras(string json)
         {
+            if (areExtrasSetup)
+            {
+                return;
+            }
+
             SetVehicleExtras();
 
             var extras = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
@@ -356,6 +371,7 @@ namespace vMenuClient
             data.Usersettings.InitUsersettings(usersettings);
 
             MainMenu.ConfigOptionsSetupComplete = true;
+            areExtrasSetup = true;
         }
 
         /// <summary>

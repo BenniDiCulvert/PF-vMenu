@@ -19,6 +19,8 @@ namespace vMenuServer
 {
     public static class DatabaseKeyValueStore
     {
+        private static readonly Dictionary<string, Task<Dictionary<string, ValueInfo>>> getAllTasks = [];
+
         public static string Truncate(this string value, int length)
         {
             if (value.Length <= length)
@@ -94,7 +96,6 @@ namespace vMenuServer
             Debug.WriteLine("Successfully connected to database.");
             SetConvarReplicated(ConfigManager.Setting.vmenu_server_store.ToString(), "true");
         }
-
 
         public static async Task<Dictionary<string, ValueInfo>> GetAll(string playerLicense)
         {
@@ -222,10 +223,10 @@ namespace vMenuServer
                         }
                         transaction.Commit();
                     }
-                    catch (Exception e)
+                    catch (Exception)
                     {
                         transaction.Rollback();
-                        throw e;
+                        throw;
                     }
                 }
             }
@@ -244,28 +245,32 @@ namespace vMenuServer
     {
         private static void SendResponse(Player player, Response response)
         {
-            player.TriggerEvent("vMenu:ServerKeyValueStoreResponse", JsonConvert.SerializeObject(response));
+            player.TriggerEventDynamicLatent("vMenu:ServerKeyValueStoreResponse", JsonConvert.SerializeObject(response));
         }
 
 
         public static async Task HandleRequest(Player player, string json)
         {
+            Request request;
+            Response response;
             try
             {
-                var request = JsonConvert.DeserializeObject<Request>(json);
-                var response = await HandleRequest(player, request);
-                SendResponse(player, response);
+                request = JsonConvert.DeserializeObject<Request>(json);
             }
             catch (Exception e)
             {
                 Debug.WriteLine($"Error handling database key-value store request from player {player.Name}: {e}");
-                var response = new Response
+                response = new Response
                 {
                     Type = Response.ResponseType.Error,
                     Error = "Error"
                 };
                 SendResponse(player, response);
+                return;
             }
+
+            response = await HandleRequest(player, request);
+            SendResponse(player, response);
         }
 
         private static async Task<Response> HandleRequest(Player player, Request request)
@@ -279,15 +284,33 @@ namespace vMenuServer
                 };
             }
 
-            var license = player.Identifiers["license"].Truncate(40);
-
+            string license = "UNKNOWN";
             Response response;
             try
             {
+                license = player.Identifiers["license"]?.Truncate(40);
+                if (string.IsNullOrEmpty(license))
+                {
+                    return new Response
+                    {
+                        Type = Response.ResponseType.Error,
+                        Error = "Player license could not be verfified",
+                    };
+                }
+
                 switch (request.Type)
                 {
                     case Request.RequestType.GetAll:
                         response = await HandleRequestGetAll(license, request);
+                        try
+                        {
+                            var keyValues = response.DataGetAll.Value.KeyValues;
+                            var json = JsonConvert.SerializeObject(keyValues);
+                            Debug.WriteLine($"INFO: Key-value-store get for {player.Name} returned {keyValues.Count} items (~ {json.Length / 1024} KiB)");
+                        }
+                        catch
+                        {
+                        }
                         break;
                     case Request.RequestType.Remove:
                         response = await HandleRequestRemove(license, request);

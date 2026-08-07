@@ -155,7 +155,7 @@ namespace vMenuServer
             }
             catch (InvalidOperationException)
             {
-                Debug.WriteLine($"^1[ERROR]^7 Trying to load key-value store key {key} as string, but is {vi.Type}.");
+                Debug.WriteLine($"^5[INFO]^7 Trying to load key-value store key {key} as string, but is {vi.Type}.");
                 return "";
             }
         }
@@ -169,7 +169,7 @@ namespace vMenuServer
             }
             catch (InvalidOperationException)
             {
-                Debug.WriteLine($"^1[ERROR]^7 Trying to load key-value store key {key} as int, but is {vi.Type}.");
+                Debug.WriteLine($"^5[INFO]^7 Trying to load key-value store key {key} as int, but is {vi.Type}.");
                 return 0;
             }
         }
@@ -183,7 +183,7 @@ namespace vMenuServer
             }
             catch (InvalidOperationException)
             {
-                Debug.WriteLine($"^1[ERROR]^7 Trying to load key-value store key {key} as float, but is {vi.Type}.");
+                Debug.WriteLine($"^5[INFO]^7 Trying to load key-value store key {key} as float, but is {vi.Type}.");
                 return 0;
             }
         }
