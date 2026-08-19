@@ -1017,6 +1017,7 @@ namespace vMenuClient.menus
                     }
                     ;
                     TimeoutFunction();
+                    _ = RemoteKeyValueStore.SyncUnsynced();
                     data.Usersettings.SyncUpdatedUsersettings();
                 }
             };

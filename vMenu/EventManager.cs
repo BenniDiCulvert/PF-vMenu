@@ -88,7 +88,7 @@ namespace vMenuClient
             {
                 var requestId = nextSponsorPlateRequestId++;
 
-                await Delay(USERSETTING_SYNC_INTERVAL + 1500);
+                await Delay(SERVER_SYNC_INTERVAL + 1500);
 
                 if (requestId != nextSponsorPlateRequestId - 1)
                 {
@@ -158,19 +158,20 @@ namespace vMenuClient
             TriggerEvent("vMenu:GetSavedVehicleModsResponse", vehicleInfo);
         }
 
-        public const int USERSETTING_SYNC_INTERVAL = 5000;
+        public const int SERVER_SYNC_INTERVAL = 5000;
 
         [Tick]
-        public async Task SyncUsersettings()
+        public async Task SyncServerStore()
         {
-            // Auto-sync usersettings regularly
+            // Auto-sync KVS and usersettings regularly
+            await Delay(SERVER_SYNC_INTERVAL);
+
+            _ = RemoteKeyValueStore.SyncUnsynced();
 
             if (data.Usersettings.UsersettingsDict.Count != 0)
             {
                 data.Usersettings.SyncUpdatedUsersettings();
             }
-
-            await Delay(USERSETTING_SYNC_INTERVAL);
         }
 
         [EventHandler("__cfx_nui:importData")]

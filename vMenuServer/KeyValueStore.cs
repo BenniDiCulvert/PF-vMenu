@@ -122,6 +122,9 @@ namespace vMenuServer
                     }
                 }
 
+                var estimatedSize = 1.25 * keyValues.Sum(kv => kv.Key.Length + kv.Value.Value.Length);
+                Debug.WriteLine($"KVS get-all license={playerLicense}, count={keyValues.Count}, estimated size={estimatedSize / 1024.0:0.000} KiB");
+
                 return keyValues;
             }
         }
@@ -136,6 +139,8 @@ namespace vMenuServer
 
         public static async Task Remove(string playerLicense, string key)
         {
+            Debug.WriteLine($"KVS remove license={playerLicense}, key={key}");
+
             using (var connection = new MySqlConnection(ConnectionString))
             {
                 await connection.OpenAsync();
@@ -162,6 +167,8 @@ namespace vMenuServer
 
         public static async Task Set(string playerLicense, string key, ValueInfo vi)
         {
+            Debug.WriteLine($"KVS set license={playerLicense}, key={key}, value={vi.Value}");
+
             using (var connection = new MySqlConnection(ConnectionString))
             {
                 await connection.OpenAsync();
@@ -190,6 +197,9 @@ namespace vMenuServer
 
         public static async Task SetAll(string playerLicense, Dictionary<string, ValueInfo> keyValues)
         {
+            var estimatedSize = 1.25 * keyValues.Sum(kv => kv.Key.Length + kv.Value.Value.Length);
+            Debug.WriteLine($"KVS set-all license={playerLicense}, count={keyValues.Count}, estimated size={estimatedSize / 1024.0:0.000} KiB");
+
             if (keyValues == null || keyValues.Count == 0)
                 return;
 
@@ -306,7 +316,6 @@ namespace vMenuServer
                         {
                             var keyValues = response.DataGetAll.Value.KeyValues;
                             var json = JsonConvert.SerializeObject(keyValues);
-                            Debug.WriteLine($"INFO: Key-value-store get for {player.Name} returned {keyValues.Count} items (~ {json.Length / 1024} KiB)");
                         }
                         catch
                         {

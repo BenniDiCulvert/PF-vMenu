@@ -20,7 +20,17 @@ namespace vMenuClient
         private static ulong _nextId = 0;
         public static ulong NewId() => _nextId++;
 
+        private static Dictionary<string, ValueInfo> notYetSyncedValues = [];
+
         private static Dictionary<ulong, Response> responses = new Dictionary<ulong, Response>();
+
+        private static void UnionUnsyncedValues(Dictionary<string, ValueInfo> kvs1, Dictionary<string, ValueInfo> kvs2)
+        {
+            foreach (var kv in kvs2)
+            {
+                kvs1[kv.Key] = kv.Value;
+            }
+        }
 
         public static void ReceiveResponse(string json)
         {
@@ -43,9 +53,15 @@ namespace vMenuClient
             return response;
         }
 
-
-        public static async Task<bool> Remove(string key)
+        public static async Task SyncUnsynced()
         {
+            await SetAll([]);
+        }
+
+        public static async Task Remove(string key)
+        {
+            notYetSyncedValues.Remove(key);
+
             var request = new Request
             {
                 Id = NewId(),
@@ -60,46 +76,57 @@ namespace vMenuClient
             {
                 Debug.WriteLine($"Error removing \"{key}\" from remote key-value store: {response.Error}");
             }
-            return response.Type != Response.ResponseType.Error;
         }
 
-        public static async Task<bool> Set(string key, ValueInfo vi)
+        public static async Task Set(string key, ValueInfo vi)
         {
-            var request = new Request
+            await SetAll(new() { { key, vi } });
+        }
+
+        public static void SetDelayed(string key, ValueInfo vi)
+        {
+            notYetSyncedValues[key] = vi;
+        }
+
+        private static bool isSetAllInProgress = false;
+
+        public static async Task SetAll(Dictionary<string, ValueInfo> keyValues)
+        {
+            UnionUnsyncedValues(notYetSyncedValues, keyValues);
+
+            if (notYetSyncedValues.Count == 0)
             {
-                Id = NewId(),
-                Type = Request.RequestType.Set,
-                DataSet = new Request.RequestDataSet
-                {
-                    Key = key,
-                    ValueInfo = vi
-                }
-            };
-            var response = await SendRequest(request);
-            if (response.Type == Response.ResponseType.Error)
-            {
-                Debug.WriteLine($"Error setting \"{key}={vi.Value}\" in remote key-value store: {response.Error}");
+                return;
             }
-            return response.Type != Response.ResponseType.Error;
-        }
+            if (isSetAllInProgress)
+            {
+                Debug.WriteLine("INFO: KVS was not synced with server because another sync is still in progress, retrying later");
+                return;
+            }
 
-        public static async Task<bool> SetAll(Dictionary<string, ValueInfo> keyValues)
-        {
+            isSetAllInProgress = true;
+
+            var notYetSyncedValuesNow = notYetSyncedValues;
+            notYetSyncedValues = [];
+
             var request = new Request
             {
                 Id = NewId(),
                 Type = Request.RequestType.SetAll,
                 DataSetAll = new Request.RequestDataSetAll
                 {
-                    KeyValues = keyValues
+                    KeyValues = notYetSyncedValuesNow,
                 }
             };
             var response = await SendRequest(request);
             if (response.Type == Response.ResponseType.Error)
             {
-                Debug.WriteLine($"Error setting multiple keys in remote key-value store: {response.Error}");
+                Debug.WriteLine($"ERROR: SetAll: {response.Error}");
+                UnionUnsyncedValues(notYetSyncedValuesNow, notYetSyncedValues);
+                notYetSyncedValues = notYetSyncedValuesNow;
             }
-            return response.Type != Response.ResponseType.Error;
+
+            isSetAllInProgress = false;
         }
 
         public static async Task<Dictionary<string, ValueInfo>> GetAll()
@@ -116,14 +143,14 @@ namespace vMenuClient
             switch (response.Type)
             {
                 case Response.ResponseType.Error:
-                    Debug.WriteLine($"Error setting multiple keys in remote key-value store: {response.Error}");
+                    Debug.WriteLine($"ERROR: GetAll: {response.Error}");
                     goto case Response.ResponseType.NoServerStore;
                 case Response.ResponseType.NoServerStore:
                     return new Dictionary<string, ValueInfo>();
                 case Response.ResponseType.Ok:
                     return response.DataGetAll?.KeyValues;
                 default:
-                    throw new InvalidOperationException("Invalid response type received from server.");
+                    throw new InvalidOperationException("ERROR: GetAll: Invalid response type received from server.");
             }
         }
     }
@@ -163,25 +190,31 @@ namespace vMenuClient
         }
         public static void Remove(string key) => _ = RemoveAsync(key);
 
+        private static void SetDelayed(string key, ValueInfo vi)
+        {
+            SetLocal(key, vi);
+            RemoteKeyValueStore.SetDelayed(key, vi);
+        }
+
         public static async Task SetAsync(string key, string value)
         {
             SetLocal(key, value);
             await RemoteKeyValueStore.Set(key, new ValueInfo(value));
         }
-        public static void Set(string key, string value) => _ = SetAsync(key, value);
+        public static void Set(string key, string value) => SetDelayed(key, new ValueInfo(value));
 
         public static async Task SetAsync(string key, int value)
         {
             SetLocal(key, value);
             await RemoteKeyValueStore.Set(key, new ValueInfo(value));
         }
-        public static void Set(string key, int value) => _ = SetAsync(key, value);
+        public static void Set(string key, int value) => SetDelayed(key, new ValueInfo(value));
 
         public static async Task SetAsync(string key, float value)
         {
             SetLocal(key, value);
             await RemoteKeyValueStore.Set(key, new ValueInfo(value));
         }
-        public static void Set(string key, float value) => _ = SetAsync(key, value);
+        public static void Set(string key, float value) => SetDelayed(key, new ValueInfo(value));
     }
 }
