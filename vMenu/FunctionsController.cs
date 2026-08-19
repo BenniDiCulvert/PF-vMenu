@@ -3572,35 +3572,25 @@ namespace vMenuClient
                 var defaultNormal = "defaultNormalTexture";
                 CreateRuntimeTextureFromImage(plateTxd, defaultNormal, "plates/plateNormals.png");
 
-                var PlateList = new Dictionary<int, string>()
+                foreach (var plateDescr in VehicleCustomization.LicensePlateDescriptorsWithId)
                 {
-                    {3, "plate01"},
-                    {0, "plate02"},
-                    {4, "plate03"},
-                    {2, "plate04"},
-                    {1, "plate05"},
-                    {5, "yankton_plate"},
-                };
-
-                foreach (var Plates in new Dictionary<int, string>(PlateList))
-                {
-
-                    var stuff = GetConvar("vmenu_plate_override_" + Plates.Value, "false");
+                    var id = plateDescr.Id;
+                    var stuff = GetConvar("vmenu_plate_override_" + plateDescr.Id, "false");
 
                     if (!(stuff == "false" || stuff == null || stuff == ""))
                     {
                         var data2 = JsonConvert.DeserializeObject<vMenuShared.ConfigManager.PlateStruct>(stuff);
                         if (!(data2.fileName == null))
                         {
-                            CreateRuntimeTextureFromImage(plateTxd, Plates.Value, data2.fileName);
-                            AddReplaceTexture(vehShare, Plates.Value, runtimeTexture, Plates.Value);
+                            CreateRuntimeTextureFromImage(plateTxd, id, data2.fileName);
+                            AddReplaceTexture(vehShare, id, runtimeTexture, id);
                         }
                         if (!(data2.normalName == null))
                         {
-                            CreateRuntimeTextureFromImage(plateTxd, Plates.Value + "_n", data2.normalName);
-                            AddReplaceTexture(vehShare, Plates.Value + "_n", runtimeTexture, Plates.Value + "_n");
+                            CreateRuntimeTextureFromImage(plateTxd, id + "_n", data2.normalName);
+                            AddReplaceTexture(vehShare, id + "_n", runtimeTexture, id + "_n");
                         }
-                        SetDefaultVehicleNumberPlateTextPattern(Plates.Key, data2.pattern);
+                        SetDefaultVehicleNumberPlateTextPattern((int)plateDescr.Style, data2.pattern);
                     }
                 }
                 PlatesSet = true;

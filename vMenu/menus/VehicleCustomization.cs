@@ -52,12 +52,53 @@ namespace vMenuClient.menus
         private static readonly LanguageManager Lm = new LanguageManager();
 
         private Dictionary<MenuItem, int> vehicleExtras = new Dictionary<MenuItem, int>();
-        private string plate01;
-        private string plate05;
-        private string plate06;
-        private string plate04;
-        private string plate03;
-        private string plate02;
+
+        public class PlateDescriptor
+        {
+            public PlateDescriptor(string id, string defaultName, LicensePlateStyle style, int menuSort)
+            {
+                Id = id;
+                DefaultName = defaultName;
+                Style = style;
+                MenuSort = menuSort;
+            }
+
+            public string Id { get; private set; }
+            public string DefaultName { get; private set; }
+            public LicensePlateStyle Style { get; private set; }
+            public int MenuSort { get; private set; }
+        }
+
+        private static readonly List<PlateDescriptor> _licensePlateDescriptors = new()
+        {
+            new("plate01", GetLabelText("CMOD_PLA_0"), LicensePlateStyle.BlueOnWhite1, 0),
+            new("plate05", GetLabelText("CMOD_PLA_4"), LicensePlateStyle.YellowOnBlack, 4),
+            new("plate04", GetLabelText("CMOD_PLA_3"), LicensePlateStyle.YellowOnBlue, 3),
+            new("plate02", GetLabelText("CMOD_PLA_1"), LicensePlateStyle.BlueOnWhite2, 1),
+            new("plate03", GetLabelText("CMOD_PLA_2"), LicensePlateStyle.BlueOnWhite3, 2),
+            new("yankton_plate", "North Yankton", LicensePlateStyle.NorthYankton, 5),
+            new(null, "eCola", LicensePlateStyle.ECola, 11),
+            new(null, "Las Venturas", LicensePlateStyle.LasVenturas, 6),
+            new(null, "Liberty City", LicensePlateStyle.LibertyCity, 7),
+            new(null, "LS Car Meet", LicensePlateStyle.LSCarMeet, 8),
+            new(null, "LS Panic", LicensePlateStyle.LSPanic, 9),
+            new(null, "LS Pounders", LicensePlateStyle.LSPounders, 10),
+            new(null, "Sprunk", LicensePlateStyle.Sprunk, 12),
+        };
+
+        public static readonly List<PlateDescriptor> LicensePlateDescriptors =
+            [.. _licensePlateDescriptors
+                .OrderBy(pdscr => pdscr.MenuSort) ];
+
+        public static readonly List<PlateDescriptor> LicensePlateDescriptorsWithId =
+            [.. LicensePlateDescriptors.Where(pdscr => !string.IsNullOrEmpty(pdscr.Id))];
+
+        public static readonly List<string> LicensePlateChoices =
+            [.. LicensePlateDescriptors
+                .Select(pdscr => pdscr.DefaultName)];
+
+        public static MenuListItem SetLicensePlateType { get; private set; }
+
         #endregion
 
         /// <summary>
@@ -88,86 +129,23 @@ namespace vMenuClient.menus
                 Label = "→→→"
             };
 
-            var PlateList = new Dictionary<int, string>()
+            if (GetSettingsBool(Setting.vmenu_enable_replace_plates))
             {
-                {0, "plate01"},
-                {1, "plate02"},
-                {2, "plate03"},
-                {3, "plate04"},
-                {4, "plate05"},
-                {5, "yankton_plate"},
-            };
-            foreach (var Plates in new Dictionary<int, string>(PlateList))
-            {
-                var stuff = GetConvar("vmenu_plate_override_" + Plates.Value, "false");
-                if (!(stuff == "false" || stuff == null || stuff == ""))
+                foreach (var plateDescr in LicensePlateDescriptorsWithId)
                 {
-                    var data2 = JsonConvert.DeserializeObject<vMenuShared.ConfigManager.PlateStruct>(stuff);
-                    if (Plates.Key == 0)
+                    var id = plateDescr.Id;
+
+                    var stuff = GetConvar("vmenu_plate_override_" + id, "false");
+                    if (!(stuff == "false" || stuff == null || stuff == ""))
                     {
-                        if (!(data2.vMenuPlateName == "" || data2.vMenuPlateName == null))
+                        var data = JsonConvert.DeserializeObject<PlateStruct>(stuff);
+                        if (string.IsNullOrEmpty(data.fileName))
                         {
-                            plate01 = data2.vMenuPlateName;
+                            continue;
                         }
-                        else
-                        {
-                            plate01 = GetLabelText("CMOD_PLA_0");
-                        }
-                    }
-                    else if (Plates.Key == 1)
-                    {
-                        if (!(data2.vMenuPlateName == "" || data2.vMenuPlateName == null))
-                        {
-                            plate02 = data2.vMenuPlateName;
-                        }
-                        else
-                        {
-                            plate02 = GetLabelText("CMOD_PLA_1");
-                        }
-                    }
-                    else if (Plates.Key == 2)
-                    {
-                        if (!(data2.vMenuPlateName == "" || data2.vMenuPlateName == null))
-                        {
-                            plate03 = data2.vMenuPlateName;
-                        }
-                        else
-                        {
-                            plate03 = GetLabelText("CMOD_PLA_2");
-                        }
-                    }
-                    else if (Plates.Key == 3)
-                    {
-                        if (!(data2.vMenuPlateName == "" || data2.vMenuPlateName == null))
-                        {
-                            plate04 = data2.vMenuPlateName;
-                        }
-                        else
-                        {
-                            plate04 = GetLabelText("CMOD_PLA_3");
-                        }
-                    }
-                    else if (Plates.Key == 4)
-                    {
-                        if (!(data2.vMenuPlateName == "" || data2.vMenuPlateName == null))
-                        {
-                            plate05 = data2.vMenuPlateName;
-                        }
-                        else
-                        {
-                            plate05 = GetLabelText("CMOD_PLA_4");
-                        }
-                    }
-                    else if (Plates.Key == 5)
-                    {
-                        if (!(data2.vMenuPlateName == "" || data2.vMenuPlateName == null))
-                        {
-                            plate06 = data2.vMenuPlateName;
-                        }
-                        else
-                        {
-                            plate06 = "North Yankton";
-                        }
+
+                        var index = LicensePlateDescriptors.FindIndex(pdscr => pdscr.Id == id);
+                        LicensePlateChoices[index] = data.vMenuPlateName;
                     }
                 }
             }
@@ -200,8 +178,7 @@ namespace vMenuClient.menus
                 DeleteSavedVehicleMods(vehicle);
             };
 
-            var licensePlates = new List<string> { plate01, plate02, plate03, plate04, plate05, plate06 };
-            var setLicensePlateType = new MenuListItem("License Plate Type", licensePlates, 0, "Select the ~b~license plate type~s~.");
+            SetLicensePlateType = new MenuListItem("License Plate Type", LicensePlateChoices, 0, "Select the ~b~license plate type~s~.");
             #endregion
 
             #region Submenus
@@ -259,7 +236,7 @@ namespace vMenuClient.menus
             if (IsAllowed(Permission.VOChangePlate))
             {
                 menu.AddMenuItem(setLicensePlateText); // SET LICENSE PLATE TEXT
-                menu.AddMenuItem(setLicensePlateType); // SET LICENSE PLATE TYPE
+                menu.AddMenuItem(SetLicensePlateType); // SET LICENSE PLATE TYPE
             }
             if (IsAllowed(Permission.VOSaveMods))
             {
@@ -305,32 +282,9 @@ namespace vMenuClient.menus
                 if (GetVehicle() != null && GetVehicle().Exists())
                 {
                     var veh = GetVehicle();
-                    if (item == setLicensePlateType)
+                    if (item == SetLicensePlateType)
                     {
-                        // Set the license plate style.
-                        switch (newIndex)
-                        {
-                            case 0:
-                                veh.Mods.LicensePlateStyle = LicensePlateStyle.BlueOnWhite1;
-                                break;
-                            case 1:
-                                veh.Mods.LicensePlateStyle = LicensePlateStyle.BlueOnWhite2;
-                                break;
-                            case 2:
-                                veh.Mods.LicensePlateStyle = LicensePlateStyle.BlueOnWhite3;
-                                break;
-                            case 3:
-                                veh.Mods.LicensePlateStyle = LicensePlateStyle.YellowOnBlue;
-                                break;
-                            case 4:
-                                veh.Mods.LicensePlateStyle = LicensePlateStyle.YellowOnBlack;
-                                break;
-                            case 5:
-                                veh.Mods.LicensePlateStyle = LicensePlateStyle.NorthYankton;
-                                break;
-                            default:
-                                break;
-                        }
+                        veh.Mods.LicensePlateStyle = LicensePlateDescriptors[newIndex].Style;
                     }
                 }
             };
@@ -1430,32 +1384,11 @@ namespace vMenuClient.menus
                 {
                     var veh = GetVehicle(true);
 
-                    if (item == setLicensePlateType && item is MenuListItem listItem && veh != null && veh.Exists())
+                    if (item == SetLicensePlateType && item != null)
                     {
-                        // Set the license plate style.
-                        switch (veh.Mods.LicensePlateStyle)
-                        {
-                            case LicensePlateStyle.BlueOnWhite1:
-                                listItem.ListIndex = 0;
-                                break;
-                            case LicensePlateStyle.BlueOnWhite2:
-                                listItem.ListIndex = 1;
-                                break;
-                            case LicensePlateStyle.BlueOnWhite3:
-                                listItem.ListIndex = 2;
-                                break;
-                            case LicensePlateStyle.YellowOnBlue:
-                                listItem.ListIndex = 3;
-                                break;
-                            case LicensePlateStyle.YellowOnBlack:
-                                listItem.ListIndex = 4;
-                                break;
-                            case LicensePlateStyle.NorthYankton:
-                                listItem.ListIndex = 5;
-                                break;
-                            default:
-                                break;
-                        }
+                        var index = LicensePlateDescriptors
+                            .FindIndex(pdscr => pdscr.Style == veh.Mods.LicensePlateStyle);
+                        SetLicensePlateType.ListIndex = Math.Max(0, index);
                     }
                 });
             };
