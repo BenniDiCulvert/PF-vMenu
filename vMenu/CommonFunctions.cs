@@ -1533,19 +1533,19 @@ namespace vMenuClient
                 rpm = tmpOldVehicle.CurrentRPM;
             }
 
-            VehicleData.VehicleModelInfo veh;
-            if (!VehicleData.HashToVehicle.TryGetValue(vehicleHash, out veh))
+            VehicleData.VehicleModelInfo modelInfo;
+            if (!VehicleData.HashToVehicle.TryGetValue(vehicleHash, out modelInfo))
             {
                 Notify.Error(CommonErrors.InvalidModel);
                 return 0;
             }
-            if (!veh.IsAllowed)
+            if (!modelInfo.IsAllowed)
             {
                 Notify.Error("You are not allowed to spawn this vehicle.");
                 return 0;
             }
 
-            if (IsThisModelABoat(veh.Hash) || IsThisModelAJetski(veh.Hash) || veh.Class == (int)VehicleClass.Boats)
+            if (IsThisModelABoat(modelInfo.Hash) || IsThisModelAJetski(modelInfo.Hash) || modelInfo.Class == (int)VehicleClass.Boats)
             {
                 if (!(IsAllowed(Permission.VSBoatsNotInWater) || Game.PlayerPed.IsSwimming || Game.PlayerPed.IsSwimmingUnderWater))
                 {
@@ -1556,7 +1556,7 @@ namespace vMenuClient
 
             if (string.IsNullOrEmpty(saveName) && withSavedModifications && IsAllowed(Permission.VOSaveMods))
             {
-                var maybeVehicleInfo = StorageManager.TryGetSavedVehicleMods(veh.Shortname);
+                var maybeVehicleInfo = StorageManager.TryGetSavedVehicleMods(modelInfo);
                 if (maybeVehicleInfo.HasValue)
                 {
                     vehicleInfo = maybeVehicleInfo.Value;
@@ -2178,23 +2178,23 @@ namespace vMenuClient
             }
         }
 
-        public static string TryGetVehicleShortname(Vehicle veh)
+        public static VehicleData.VehicleModelInfo TryGetVehicleModelInfo(Vehicle veh)
         {
             var hash = (uint)veh.Model.Hash;
             VehicleData.HashToVehicle.TryGetValue(hash, out var modelInfo);
             if (modelInfo == null)
             {
-                Debug.WriteLine("[ERROR] Shortname for vehicle {hash} not found.");
+                Debug.WriteLine("[ERROR] Info for vehicle {hash} not found.");
                 return null;
             }
 
-            return modelInfo.Shortname;
+            return modelInfo;
         }
 
         public static void SaveVehicleMods(Vehicle veh)
         {
-            var shortname = TryGetVehicleShortname(veh);
-            if (string.IsNullOrEmpty(shortname))
+            var modelInfo = TryGetVehicleModelInfo(veh);
+            if (modelInfo == null)
             {
                 Notify.Error(CommonErrors.InvalidModel, placeholderValue: "The vehicle's modifications could not be saved.");
                 return;
@@ -2206,20 +2206,20 @@ namespace vMenuClient
                 return;
             }
 
-            StorageManager.SaveVehicleMods(shortname, vi.Value);
+            StorageManager.SaveVehicleMods(modelInfo, vi.Value);
             Notify.Info("Vehicle modifications saved");
         }
 
         public static void DeleteSavedVehicleMods(Vehicle veh)
         {
-            var shortname = TryGetVehicleShortname(veh);
-            if (string.IsNullOrEmpty(shortname))
+            var modelInfo = TryGetVehicleModelInfo(veh);
+            if (modelInfo == null)
             {
                 Notify.Error(CommonErrors.InvalidModel, placeholderValue: "The vehicle's modifications could not be deleted.");
                 return;
             }
 
-            StorageManager.DeleteSavedVehicleMods(shortname);
+            StorageManager.DeleteSavedVehicleMods(modelInfo);
             Notify.Info("Vehicle modifications deleted");
         }
         #endregion
@@ -2261,7 +2261,9 @@ namespace vMenuClient
         {
             return KeyValueStore.GetAllWithPrefix("veh_")
                 .Keys
-                .ToDictionary(name => name, StorageManager.GetSavedVehicleInfo);
+                .ToDictionary(name => name, StorageManager.TryGetSavedVehicleInfo)
+                .Where(kv => kv.Value != null)
+                .ToDictionary(kv => kv.Key, kv => (VehicleInfo)kv.Value);
         }
         #endregion
 

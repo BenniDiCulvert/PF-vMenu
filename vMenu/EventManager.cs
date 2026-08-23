@@ -53,6 +53,8 @@ namespace vMenuClient
                     {
                         Notify.Info("vMenu save data loaded from server. You may need to restart your game to use it.");
                     }
+
+                    StorageManager.Cleanup();
                 }
             });
             EventHandlers.Add("vMenu:ServerKeyValueStoreResponse", RemoteKeyValueStore.ReceiveResponse);
@@ -154,7 +156,10 @@ namespace vMenuClient
         [EventHandler("vMenu:GetSavedVehicleMods")]
         public void GetSavedVehicleMods(string shortname)
         {
-            var vehicleInfo = StorageManager.TryGetSavedVehicleMods(shortname);
+            VehicleData.AllVehicles.TryGetValue(shortname.ToLower(), out var modelInfo);
+            var vehicleInfo = modelInfo != null
+                ? StorageManager.TryGetSavedVehicleMods(modelInfo)
+                : null;
             TriggerEvent("vMenu:GetSavedVehicleModsResponse", vehicleInfo);
         }
 

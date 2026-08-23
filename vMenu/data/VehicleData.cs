@@ -508,11 +508,13 @@ namespace vMenuClient.data
 
             public VehicleModelInfo(string shortname)
             {
-                Shortname = shortname;
+                ShortnameCaseSensitive = shortname;
+                Shortname = shortname.ToLower();
                 Hash = (uint)GetHashKey(shortname);
             }
 
             public uint Hash { get; }
+            public string ShortnameCaseSensitive { get; }
             public string Shortname { get; }
             public string Name => GetName(Hash, Shortname, out var _);
             public bool HasProperName
@@ -616,7 +618,6 @@ namespace vMenuClient.data
                 return displayVehicles;
             }
         }
-
 
         public static Tuple<string, string, string> GetDigitsNondigitsRest(string s)
         {
@@ -809,7 +810,7 @@ namespace vMenuClient.data
                 {
                     return true;
                 }
-                return StorageManager.TryGetSavedVehicleMods(info.Shortname) != null
+                return StorageManager.TryGetSavedVehicleMods(info) != null
                     ? FilterDefaultMods == VehicleFilterFilterDefaultMods.With
                     : FilterDefaultMods == VehicleFilterFilterDefaultMods.Without;
             }

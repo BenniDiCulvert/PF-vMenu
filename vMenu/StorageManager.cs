@@ -5,14 +5,19 @@ using CitizenFX.Core;
 
 using Newtonsoft.Json;
 
-using static CitizenFX.Core.Native.API;
+using static vMenuClient.data.VehicleData;
+
 using static vMenuClient.CommonFunctions;
 
 namespace vMenuClient
 {
-
     public static class StorageManager
     {
+        public static void Cleanup()
+        {
+            NormalizeSavedVehicleModKvs();
+        }
+
         /// <summary>
         /// Save Dictionary(string, string) to local storage.
         /// </summary>
@@ -129,18 +134,26 @@ namespace vMenuClient
             return false;
         }
 
-        public static bool SaveVehicleMods(string shortname, VehicleInfo vehicleInfo) =>
-            SaveVehicleInfo($"vehmods_{shortname}", vehicleInfo, true);
-
         /// <summary>
         /// New function to get vehicle information from a saved vehicle.
         /// </summary>
         /// <param name="saveName">Saved vehicle name to get info from. (name includes "veh_")</param>
         /// <returns></returns>
-        public static VehicleInfo GetSavedVehicleInfo(string saveName)
+        public static VehicleInfo? TryGetSavedVehicleInfo(string saveName)
         {
-            var json = KeyValueStore.GetString(saveName);
-            return JsonConvert.DeserializeObject<VehicleInfo>(json);
+            try
+            {
+                var json = KeyValueStore.GetString(saveName);
+                if (string.IsNullOrEmpty(json))
+                {
+                    return null;
+                }
+                return JsonConvert.DeserializeObject<VehicleInfo>(json);
+            }
+            catch // ignore
+            {
+                return null;
+            }
             //var vi = new VehicleInfo() { };
             //dynamic data = JsonConvert.DeserializeObject(json);
             //if (data.ContainsKey("version"))
@@ -251,24 +264,49 @@ namespace vMenuClient
             //return vi;
         }
 
-        public static VehicleInfo? TryGetSavedVehicleInfo(string saveName)
+        #region Default Vehicle Mods
+
+        public const string DEFAULT_VEHICLE_MODS_KEY_PREFIX = "vehmods_";
+
+        public static void NormalizeSavedVehicleModKvs()
         {
-            try
+            var kvs = KeyValueStore.GetAllWithPrefixString(DEFAULT_VEHICLE_MODS_KEY_PREFIX);
+            var caseSensitiveKsvs = kvs
+            .Select(kv => new
             {
-                return GetSavedVehicleInfo(saveName);
-            }
-            catch
+                KeyCaseSensitive = kv.Key,
+                KeyCaseInsensitive = kv.Key.ToLower(),
+                kv.Value,
+            })
+            .Where(kvs => kvs.KeyCaseSensitive != kvs.KeyCaseInsensitive);
+
+            foreach (var ksv in caseSensitiveKsvs)
             {
-                // Ignore
+                Debug.WriteLine($"{ksv.KeyCaseInsensitive}");
+                KeyValueStore.Remove(ksv.KeyCaseSensitive);
+                if (!kvs.TryGetValue(ksv.KeyCaseInsensitive, out var val))
+                {
+                    KeyValueStore.Set(ksv.KeyCaseInsensitive, ksv.Value);
+                }
             }
-            return null;
         }
 
-        public static VehicleInfo? TryGetSavedVehicleMods(string shortname) =>
-            TryGetSavedVehicleInfo($"vehmods_{shortname}");
+        private static string GetSavedVehicleModsKey(string shortname) =>
+            $"{DEFAULT_VEHICLE_MODS_KEY_PREFIX}{shortname}";
 
-        public static void DeleteSavedVehicleMods(string shortname) =>
-            KeyValueStore.Remove($"vehmods_{shortname}");
+        private static string GetSavedVehicleModsKey(VehicleModelInfo modelInfo) =>
+            GetSavedVehicleModsKey(modelInfo.Shortname);
+
+        public static bool SaveVehicleMods(VehicleModelInfo modelInfo, VehicleInfo vehicleInfo) =>
+            SaveVehicleInfo(GetSavedVehicleModsKey(modelInfo), vehicleInfo, true);
+
+        public static VehicleInfo? TryGetSavedVehicleMods(VehicleModelInfo modelInfo) =>
+            TryGetSavedVehicleInfo(GetSavedVehicleModsKey(modelInfo));
+
+        public static void DeleteSavedVehicleMods(VehicleModelInfo modelInfo) =>
+            KeyValueStore.Remove(GetSavedVehicleModsKey(modelInfo));
+
+        #endregion
 
         /// <summary>
         /// Save json data. Returns true if save was successfull.

@@ -243,7 +243,7 @@ namespace vMenuClient.menus
                     MainMenu.MenuText["SAVED_VEHICLES__SAVE_AS_DEFAULT_MODS__DESC"]);
                 saveAsDefaultMod.Confirmed += (_s, _args) =>
                 {
-                    StorageManager.SaveVehicleMods(selectedVehicle.Item3.Shortname, selectedVehicle.Item2);
+                    StorageManager.SaveVehicleMods(selectedVehicle.Item3, selectedVehicle.Item2);
                 };
             }
 
