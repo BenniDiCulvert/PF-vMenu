@@ -977,7 +977,7 @@ namespace vMenuClient.menus
             };
 
             // Handle button presses.
-            menu.OnItemSelect += (sender, item, index) =>
+            menu.OnItemSelect += async (sender, item, index) =>
             {
                 if (item == copyCoordinates)
                 {
@@ -1010,15 +1010,11 @@ namespace vMenuClient.menus
                 {
                     UserDefaults.SaveSettings();
                     saveSettings.Enabled = false;
-                    async void TimeoutFunction()
-                    {
-                        await Delay(2000);
-                        saveSettings.Enabled = true;
-                    }
-                    ;
-                    TimeoutFunction();
-                    _ = RemoteKeyValueStore.SyncUnsynced();
+                    var now = GetGameTimer();
+                    await RemoteKeyValueStore.SyncUnsynced();
                     data.Usersettings.SyncUpdatedUsersettings();
+                    await Delay(Math.Max(2000 - (GetGameTimer() - now), 0));
+                    saveSettings.Enabled = true;
                 }
             };
         }

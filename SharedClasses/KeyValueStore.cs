@@ -245,9 +245,7 @@ namespace vMenuShared
             public enum RequestType
             {
                 GetAll,
-                Remove,
-                Set,
-                SetAll,
+                UpdateMany,
             }
 
 
@@ -255,19 +253,10 @@ namespace vMenuShared
             {
             }
 
-            public struct RequestDataRemove
+            public struct RequestDataUpdateMany
             {
-                public string Key { get; set; }
-            }
-
-            public struct RequestDataSet
-            {
-                public string Key { get; set; }
-                public KeyValueStore.ValueInfo ValueInfo { get; set; }
-            }
-            public struct RequestDataSetAll
-            {
-                public Dictionary<string, KeyValueStore.ValueInfo> KeyValues;
+                public Dictionary<string, KeyValueStore.ValueInfo> Set { get; set; }
+                public List<string> Remove { get; set; }
             }
 
 
@@ -276,9 +265,7 @@ namespace vMenuShared
             public RequestType Type { get; set; }
 
             public RequestDataGetAll? DataGetAll { get; set; }
-            public RequestDataRemove? DataRemove { get; set; }
-            public RequestDataSet? DataSet { get; set; }
-            public RequestDataSetAll? DataSetAll { get; set; }
+            public RequestDataUpdateMany? DataUpdateMany { get; set; }
         }
 
         public struct Response
@@ -296,14 +283,7 @@ namespace vMenuShared
                 public Dictionary<string, KeyValueStore.ValueInfo> KeyValues { get; set; }
             }
 
-            public struct ResponseDataRemove
-            {
-            }
-
-            public struct ResponseDataSet
-            {
-            }
-            public struct ResponseDataSetAll
+            public struct ResponseDataUpdateMany
             {
             }
 
@@ -314,9 +294,51 @@ namespace vMenuShared
             public ResponseType Type { get; set; }
 
             public ResponseDataGetAll? DataGetAll { get; set; }
-            public ResponseDataRemove? DataRemove { get; set; }
-            public ResponseDataSet? DataSet { get; set; }
-            public ResponseDataSetAll? DataSetAll { get; set; }
+            public ResponseDataUpdateMany? DataUpdateMany { get; set; }
+        }
+    }
+
+    public class RemoteKeyValueStoreUpdates
+    {
+        private Dictionary<string, KeyValueStore.ValueInfo> setValues = new();
+        private HashSet<string> removedValues = new();
+
+        public bool HasUpdates => (setValues.Count + removedValues.Count) > 0;
+
+        public void Set(string key, KeyValueStore.ValueInfo vi)
+        {
+            setValues[key] = vi;
+            removedValues.Remove(key);
+        }
+
+        public void Remove(string key)
+        {
+            removedValues.Add(key);
+            setValues.Remove(key);
+        }
+
+        public void MergeOlderIntoThis(RemoteKeyValueStoreUpdates older)
+        {
+            bool HasChangedSince(string key) => setValues.ContainsKey(key) || removedValues.Contains(key);
+
+            foreach (var kv in older.setValues.Where(kv => !HasChangedSince(kv.Key)))
+            {
+                Set(kv.Key, kv.Value);
+            }
+
+            foreach (var key in older.removedValues.Where(key => !HasChangedSince(key)))
+            {
+                Remove(key);
+            }
+        }
+
+        public KeyValueStoreSync.Request.RequestDataUpdateMany ToRequest()
+        {
+            return new KeyValueStoreSync.Request.RequestDataUpdateMany
+            {
+                Set = setValues,
+                Remove = [.. removedValues],
+            };
         }
     }
 }

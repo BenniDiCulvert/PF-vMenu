@@ -591,7 +591,7 @@ namespace vMenuClient.menus
             { Label = $"{0.0}" }
             .ToWrapped();
 
-        private async Task SaveHandlingDataToKvs(string key)
+        private void SaveHandlingDataToKvs(string key)
         {
             var handlingData = new Dictionary<string, string>();
             foreach (var handlingField in HandlingFields)
@@ -600,7 +600,7 @@ namespace vMenuClient.menus
             }
 
             var json = JsonConvert.SerializeObject(handlingData);
-            await KeyValueStore.SetAsync(key, json);
+            KeyValueStore.Set(key, json);
         }
 
         private void CreateManageSavedHandlingDataMenu(string name, string key)
@@ -623,7 +623,7 @@ namespace vMenuClient.menus
             };
 
             var overwriteBtn = WMenuItem.CreateConfirmationButton("Overwrite", "Overwrite the saved handling data");
-            overwriteBtn.Confirmed += async (_s, _args) => await SaveHandlingDataToKvs(key);
+            overwriteBtn.Confirmed += (_s, _args) => SaveHandlingDataToKvs(key);
 
             var deleteBtn = WMenuItem.CreateConfirmationButton("Delete", "Delete the saved handling data");
             deleteBtn.Confirmed += (_s, _args) =>
@@ -673,7 +673,7 @@ namespace vMenuClient.menus
                 return;
             }
 
-            await SaveHandlingDataToKvs(kvsKey);
+            SaveHandlingDataToKvs(kvsKey);
             CreateManageSavedHandlingDataMenu(input, kvsKey);
         }
 

@@ -171,7 +171,7 @@ namespace vMenuClient
             // Auto-sync KVS and usersettings regularly
             await Delay(SERVER_SYNC_INTERVAL);
 
-            _ = RemoteKeyValueStore.SyncUnsynced();
+            await RemoteKeyValueStore.SyncUnsynced();
 
             if (data.Usersettings.UsersettingsDict.Count != 0)
             {

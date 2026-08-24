@@ -123,7 +123,7 @@ namespace vMenuServer
                 }
 
                 var estimatedSize = 1.25 * keyValues.Sum(kv => kv.Key.Length + kv.Value.Value.Length);
-                Debug.WriteLine($"KVS get-all license={playerLicense}, count={keyValues.Count}, estimated size={estimatedSize / 1024.0:0.000} KiB");
+                Debug.WriteLine($"KVS::GetAll, license={playerLicense}, count={keyValues.Count}, estimated size={estimatedSize / 1024.0:0.000} KiB");
 
                 return keyValues;
             }
@@ -139,7 +139,7 @@ namespace vMenuServer
 
         public static async Task Remove(string playerLicense, string key)
         {
-            Debug.WriteLine($"KVS remove license={playerLicense}, key={key}");
+            Debug.WriteLine($"KVS::Remove, license={playerLicense}, key={key}");
 
             using (var connection = new MySqlConnection(ConnectionString))
             {
@@ -157,6 +157,48 @@ namespace vMenuServer
             }
         }
 
+        public static async Task RemoveMany(string playerLicense, List<string> keys)
+        {
+            Debug.WriteLine($"KVS::RemoveMany, license={playerLicense}, count={keys.Count}");
+
+            if (keys == null || keys.Count == 0)
+                return;
+
+            using (var connection = new MySqlConnection(ConnectionString))
+            {
+                await connection.OpenAsync();
+
+                var command = new MySqlCommand
+                {
+                    Connection = connection,
+                    CommandText = "DELETE FROM `vMenu` WHERE `PlayerLicense`=@playerLicense AND `Key`=@key"
+                };
+                command.Parameters.AddWithValue("@playerLicense", playerLicense);
+                command.Parameters.AddWithValue("@key", null);
+                command.Prepare();
+
+                using (var transaction = await connection.BeginTransactionAsync())
+                {
+                    try
+                    {
+                        foreach (var key in keys)
+                        {
+                            command.Transaction = transaction;
+                            command.Parameters["@key"].Value = key.Truncate(64);
+                            await command.ExecuteNonQueryAsync();
+                            await BaseScript.Delay(0);
+                        }
+                        transaction.Commit();
+                    }
+                    catch (Exception)
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
+
         public static async Task Remove(string key)
         {
             if (string.IsNullOrEmpty(ConnectionString))
@@ -167,7 +209,7 @@ namespace vMenuServer
 
         public static async Task Set(string playerLicense, string key, ValueInfo vi)
         {
-            Debug.WriteLine($"KVS set license={playerLicense}, key={key}, value={vi.Value}");
+            Debug.WriteLine($"KVS::Set, license={playerLicense}, key={key}, value={vi.Value}");
 
             using (var connection = new MySqlConnection(ConnectionString))
             {
@@ -198,7 +240,7 @@ namespace vMenuServer
         public static async Task SetAll(string playerLicense, Dictionary<string, ValueInfo> keyValues)
         {
             var estimatedSize = 1.25 * keyValues.Sum(kv => kv.Key.Length + kv.Value.Value.Length);
-            Debug.WriteLine($"KVS set-all license={playerLicense}, count={keyValues.Count}, estimated size={estimatedSize / 1024.0:0.000} KiB");
+            Debug.WriteLine($"KVS::SetAll, license={playerLicense}, count={keyValues.Count}, estimated size={estimatedSize / 1024.0:0.000} KiB");
 
             if (keyValues == null || keyValues.Count == 0)
                 return;
@@ -304,7 +346,7 @@ namespace vMenuServer
                     return new Response
                     {
                         Type = Response.ResponseType.Error,
-                        Error = "Player license could not be verfified",
+                        Error = "Player license could not be verified",
                     };
                 }
 
@@ -321,14 +363,8 @@ namespace vMenuServer
                         {
                         }
                         break;
-                    case Request.RequestType.Remove:
-                        response = await HandleRequestRemove(license, request);
-                        break;
-                    case Request.RequestType.Set:
-                        response = await HandleRequestSet(license, request);
-                        break;
-                    case Request.RequestType.SetAll:
-                        response = await HandleRequestSetAll(license, request);
+                    case Request.RequestType.UpdateMany:
+                        response = await HandleRequestUpdateMany(license, request);
                         break;
                     default:
                         response = new Response
@@ -366,34 +402,13 @@ namespace vMenuServer
             };
         }
 
-        private static async Task<Response> HandleRequestRemove(string playerLicense, Request requestRemove)
+        private static async Task<Response> HandleRequestUpdateMany(string playerLicense, Request requestUpdateMany)
         {
-            await DatabaseKeyValueStore.Remove(playerLicense, requestRemove.DataRemove?.Key);
+            await DatabaseKeyValueStore.SetAll(playerLicense, requestUpdateMany.DataUpdateMany?.Set);
+            await DatabaseKeyValueStore.RemoveMany(playerLicense, requestUpdateMany.DataUpdateMany?.Remove);
             return new Response
             {
-                DataRemove = new Response.ResponseDataRemove
-                { }
-            };
-        }
-
-        private static async Task<Response> HandleRequestSet(string playerLicense, Request requestSet)
-        {
-            var data = requestSet.DataSet.Value;
-            await DatabaseKeyValueStore.Set(playerLicense, data.Key, data.ValueInfo);
-            return new Response
-            {
-                DataSet = new Response.ResponseDataSet
-                {
-                }
-            };
-        }
-
-        private static async Task<Response> HandleRequestSetAll(string playerLicense, Request requestSetAll)
-        {
-            await DatabaseKeyValueStore.SetAll(playerLicense, requestSetAll.DataSetAll?.KeyValues);
-            return new Response
-            {
-                DataSetAll = new Response.ResponseDataSetAll
+                DataUpdateMany = new Response.ResponseDataUpdateMany
                 {
                 }
             };
