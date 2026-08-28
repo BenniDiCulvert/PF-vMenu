@@ -204,9 +204,10 @@ namespace vMenuClient.menus
             {
                 Enabled = false
             };
-            var spawnNewEntity = new MenuItem("Spawn New Entity", "Spawns a new entity into the world and lets you set its position and rotation.");
-            var confirmEntityPosition = new MenuItem("Confirm Entity Position", "Stops placing the entity, and sets it at its current location.");
-            var confirmAndDuplicate = new MenuItem("Confirm Entity Position And Duplicate", "Stops placing the entity, sets it at its current location, and creates new one to place.");
+            var resetRotationChoices = new List<string> { "Reset Rot.", "Keep Rot." };
+            var spawnNewEntity = new MenuListItem("Spawn New Entity", resetRotationChoices, 0, "Spawns a new entity into the world and lets you set its position and rotation.");
+            var placeEntityChoices = new List<string> { "Finish", "Duplicate" };
+            var placeEntity = new MenuListItem("Place Entity", placeEntityChoices, 0, "Places the entity at its current location.");
             var cancelEntity = new MenuItem("Cancel", "Deletes the entity and cancels its placement.");
             var copySpawnedToClipboard = new MenuItem("Copy To Clipboard", "Copy spawned entity info to clipboard.");
             var removeLastSpawnedEntity = new MenuItem("Undo Place", "Undo the placement of entities in reverse order.");
@@ -589,8 +590,7 @@ namespace vMenuClient.menus
                 entitySpawnerMenu.AddMenuItem(rotationRelativeTo);
                 entitySpawnerMenu.AddMenuItem(rotationAxis);
                 entitySpawnerMenu.AddMenuItem(rotationSnap);
-                entitySpawnerMenu.AddMenuItem(confirmEntityPosition);
-                entitySpawnerMenu.AddMenuItem(confirmAndDuplicate);
+                entitySpawnerMenu.AddMenuItem(placeEntity);
                 entitySpawnerMenu.AddMenuItem(cancelEntity);
                 entitySpawnerMenu.AddMenuItem(copySpawnedToClipboard);
                 entitySpawnerMenu.AddMenuItem(removeLastSpawnedEntity);
@@ -642,41 +642,12 @@ namespace vMenuClient.menus
                     {
                         EntitySpawner.ResetRotation();
                     }
-                    else if (item == spawnNewEntity)
-                    {
-                        if (EntitySpawner.CurrentEntity != null || EntitySpawner.Active)
-                        {
-                            Notify.Error("You are already placing one entity, set its location or cancel and try again!");
-                            return;
-                        }
-                        ResetMenuBeforeAfterPlace();
-
-                        var result = await GetUserInput(windowTitle: "Enter model name or hash", 100);
-
-                        if (string.IsNullOrEmpty(result))
-                        {
-                            Notify.Error(CommonErrors.InvalidInput);
-                        }
-
-                        EntitySpawner.SpawnEntity(result, Game.PlayerPed.Position);
-                    }
-                    else if (item == confirmEntityPosition || item == confirmAndDuplicate)
-                    {
-                        if (EntitySpawner.CurrentEntity != null)
-                        {
-                            EntitySpawner.FinishPlacement(item == confirmAndDuplicate);
-                            ResetMenuBeforeAfterPlace();
-                        }
-                        else
-                        {
-                            Notify.Error("No entity to confirm position for!");
-                        }
-                    }
                     else if (item == cancelEntity)
                     {
                         if (EntitySpawner.CurrentEntity != null)
                         {
                             EntitySpawner.CurrentEntity.Delete();
+                            EntitySpawner.ResetRotation();
                             ResetMenuBeforeAfterPlace();
                         }
                         else
@@ -720,11 +691,51 @@ namespace vMenuClient.menus
                         EntitySpawner.AlignToSurfaceContinuously = newIndex == 1;
                     }
                 };
-                entitySpawnerMenu.OnListItemSelect += (sender, item, index, itemIndex) =>
+                entitySpawnerMenu.OnListItemSelect += async (sender, item, index, itemIndex) =>
                 {
-                    if (item == alignEntityToSurface && index == 0)
+                    if (item == spawnNewEntity)
+                    {
+                        var result = await GetUserInput(windowTitle: "Enter model name or hash", 100);
+
+                        if (string.IsNullOrEmpty(result))
+                        {
+                            Notify.Error(CommonErrors.InvalidInput);
+                            return;
+                        }
+
+                        if (EntitySpawner.CurrentEntity != null)
+                        {
+                            EntitySpawner.CurrentEntity.Delete();
+                        }
+
+                        if (index == 0)
+                        {
+                            EntitySpawner.ResetRotation();
+                        }
+
+                        while (EntitySpawner.Active)
+                        {
+                            await Delay(1);
+                        }
+
+                        ResetMenuBeforeAfterPlace();
+                        EntitySpawner.SpawnEntity(result, Game.PlayerPed.Position);
+                    }
+                    else if (item == alignEntityToSurface && index == 0)
                     {
                         EntitySpawner.AlignEntityToSurface();
+                    }
+                    else if (item == placeEntity)
+                    {
+                        if (EntitySpawner.CurrentEntity != null)
+                        {
+                            EntitySpawner.FinishPlacement(index == 1);
+                            ResetMenuBeforeAfterPlace();
+                        }
+                        else
+                        {
+                            Notify.Error("No entity to place!");
+                        }
                     }
                 };
                 entitySpawnerMenu.OnCheckboxChange += (_sender, item, ix, checked_) =>
