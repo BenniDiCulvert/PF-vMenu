@@ -471,6 +471,51 @@ namespace vMenuClient.data
             }
         }
 
+        private static readonly Dictionary<char, char> lowerUnicodeToAsciiMap = new()
+        {
+            { 'à', 'a' },
+            { 'á', 'a' },
+            { 'â', 'a' },
+            { 'ã', 'a' },
+            { 'ä', 'a' },
+            { 'å', 'a' },
+            { 'æ', 'a' },
+            { 'ç', 'c' },
+            { 'è', 'e' },
+            { 'é', 'e' },
+            { 'ê', 'e' },
+            { 'ë', 'e' },
+            { 'ì', 'i' },
+            { 'í', 'i' },
+            { 'î', 'i' },
+            { 'ï', 'i' },
+            // { 'ð', '_' },
+            { 'ñ', 'n' },
+            { 'ò', 'o' },
+            { 'ó', 'o' },
+            { 'ô', 'o' },
+            { 'õ', 'o' },
+            { 'ö', 'o' },
+            { 'ø', 'o' },
+            { 'ù', 'u' },
+            { 'ú', 'u' },
+            { 'û', 'u' },
+            { 'ü', 'u' },
+            { 'ý', 'y' },
+            // { 'þ', '_' },
+            { 'ÿ', 'y' },
+        };
+
+        public static char LowerUnicode8ToAscii(char c)
+        {
+            return lowerUnicodeToAsciiMap.TryGetValue(c, out var a) ? a : c;
+        }
+
+        public static string ToLowerAscii(string s)
+        {
+            return string.Join("", s.ToLower().Select(LowerUnicode8ToAscii));
+        }
+
         public class VehicleModelInfo
         {
             public static string GetName(uint hash, string shortname, out bool hasProperName)
@@ -511,20 +556,18 @@ namespace vMenuClient.data
                 ShortnameCaseSensitive = shortname;
                 Shortname = shortname.ToLower();
                 Hash = (uint)GetHashKey(shortname);
+
+                Name = GetName(Hash, Shortname, out var hasProperName);
+                HasProperName = hasProperName;
+                LowerAsciiName = ToLowerAscii(Name);
             }
 
             public uint Hash { get; }
             public string ShortnameCaseSensitive { get; }
             public string Shortname { get; }
-            public string Name => GetName(Hash, Shortname, out var _);
-            public bool HasProperName
-            {
-                get
-                {
-                    GetName(Hash, Shortname, out var hasProperName);
-                    return hasProperName;
-                }
-            }
+            public string Name { get; }
+            public string LowerAsciiName { get; }
+            public bool HasProperName { get; }
             public string Manufacturer => GetManufacturer(Hash);
             public int Class => GetVehicleClassFromName(Hash);
             public string ClassName => GetLabelText($"VEH_CLASS_{Class}");
@@ -533,19 +576,18 @@ namespace vMenuClient.data
                 get => AddonVehicles.Contains(Shortname);
             }
 
-            private HashSet<string> customVehicleClasses = null;
             public HashSet<string> CustomVehicleClasses
             {
                 get
                 {
-                    if (customVehicleClasses != null)
-                        return customVehicleClasses;
+                    if (_customVehicleClasses != null)
+                        return _customVehicleClasses;
 
-                    customVehicleClasses = [..VehicleData.CustomVehicleClasses
+                    _customVehicleClasses = [..VehicleData.CustomVehicleClasses
                         .Where(c => c.Vehicles.Contains(Shortname))
                         .Select(c => c.Name)];
 
-                    return customVehicleClasses;
+                    return _customVehicleClasses;
                 }
             }
 
@@ -560,6 +602,8 @@ namespace vMenuClient.data
             public bool IsBlacklisted => VehicleBlacklist.Contains(Shortname);
             public bool IsHidden => VehicleDisablelist.Contains(Shortname);
             public bool IsSporty => SportyVehicles.Contains(Shortname);
+
+            private HashSet<string> _customVehicleClasses = null;
         }
 
         private static Dictionary<string, VehicleModelInfo> allVehicles = null;
@@ -774,10 +818,16 @@ namespace vMenuClient.data
                 if (string.IsNullOrEmpty(Name))
                     return true;
 
+                bool nameSpecified = !string.IsNullOrEmpty(name);
+                string lowerAsciiName = ToLowerAscii(Name);
+
                 return
                     info.Name.ToLower().Contains(Name.ToLower()) ||
                     info.Shortname.ToLower().Contains(Name.ToLower()) ||
-                    (!string.IsNullOrEmpty(name) && name.ToLower().Contains(Name.ToLower()));
+                    (nameSpecified && name.ToLower().Contains(Name.ToLower())) ||
+                    info.LowerAsciiName.Contains(lowerAsciiName) ||
+                    info.Shortname.Contains(lowerAsciiName) ||
+                    (nameSpecified && ToLowerAscii(name).Contains(lowerAsciiName));
             }
 
             private bool IsManufacturerMatching(VehicleModelInfo info)
