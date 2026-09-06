@@ -18,6 +18,18 @@ local function getLicense(playerSrc)
     return GetPlayerIdentifierByType(playerSrc, "license")
 end
 
+---@param playerSrc PlayerSrc
+---@return boolean
+local function isAdmin(playerSrc)
+    return IsPlayerAceAllowed(playerSrc, "vMenu.IsAdmin")
+end
+
+---@param playerSrc PlayerSrc
+---@return boolean
+local function isModerator(playerSrc)
+    return IsPlayerAceAllowed(playerSrc, "vMenu.IsModerator")
+end
+
 PlayerPermissionsHooks = {
 
     --- Fetch permissions for the given player. Built-in permissions returned here will override the value specified for
