@@ -99,12 +99,20 @@ namespace vMenuClient.menus
             var textColor = !vi.HasProperName ? "~y~" : vi.IsAddon ? "~q~" : "";
             var text = $"{textColor}{vi.Name}~s~";
 
-            var manufacturerDescr = vi.Manufacturer != "NULL" ? $"~b~{vi.Manufacturer}~s~ " : "";
+            var manufacturer = vi.Manufacturer;
+
+            string manufacturerDescr = "";
+            string manufacturerLabel = null;
+            if (!string.IsNullOrEmpty(manufacturer) && manufacturer != "NULL")
+            {
+                manufacturerDescr = $"~b~{manufacturer}~s~ ";
+                manufacturerLabel = $"~c~{manufacturer}~s~";
+            }
+
             var description = $"Spawn the {manufacturerDescr}~b~{vi.Name}~s~.";
 
             var btn = new MenuItem(text, description)
             {
-                Label = $"~c~({vi.Shortname})~s~",
                 ItemData = vi
             }.ToWrapped();
             btn.Selected += async (_s, _args) => await SpawnVehicle(
