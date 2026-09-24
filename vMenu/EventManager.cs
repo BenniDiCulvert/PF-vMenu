@@ -40,6 +40,7 @@ namespace vMenuClient
             EventHandlers.Add("vMenu:GetOutOfCar", new Action<int, int>(GetOutOfCar));
             EventHandlers.Add("vMenu:SetDriftSuspension", new Action<int, bool>(SetDriftSuspension));
             EventHandlers.Add("vMenu:PrivateMessage", new Action<string, string>(PrivateMessage));
+            EventHandlers.Add("vMenu:SetDefaultColors", new Action<string>(color => SetDefaultColors(JsonConvert.DeserializeObject<VehicleColors>(color))));
             EventHandlers.Add("vMenu:SetDefaultPlate", new Action<string>(plate => SetDefaultPlate(JsonConvert.DeserializeObject<SavedPlate>(plate))));
             EventHandlers.Add("onClientResourceStart", async (string resourceName) =>
             {
@@ -61,6 +62,7 @@ namespace vMenuClient
 
 #if CARBON_MILE
             void CarbonMileRequestSponsorPlate() => TriggerServerEvent("vMenu:RequestSponsorPlate");
+            void CarbonMileRequestSupporterColors() => TriggerServerEvent("vMenu:RequestSupporterColors");
 
             EventHandlers.Add("onClientResourceStart", async (string resourceName) =>
             {
@@ -84,6 +86,16 @@ namespace vMenuClient
                 });
             }
 
+            void SetSupporterColors(string colorsJson)
+            {
+                if (string.IsNullOrEmpty(colorsJson))
+                {
+                    return;
+                }
+
+                SetDefaultColors(JsonConvert.DeserializeObject<VehicleColors>(colorsJson));
+            }
+
             ulong nextSponsorPlateRequestId = 0;
 
             async void RequestSponsorPlateDelayed(object _)
@@ -103,6 +115,7 @@ namespace vMenuClient
             EventHandlers.Add("vMenu:SetSponsorPlate", new Action<string, int>(SetSponsorPlate));
             EventHandlers.Add("vMenu:UsersettingUpdated:racePlateText", new Action<object>(RequestSponsorPlateDelayed));
             EventHandlers.Add("vMenu:UsersettingUpdated:racePlateStyle", new Action<object>(RequestSponsorPlateDelayed));
+            EventHandlers.Add("vMenu:SetSupporterColors", new Action<string>(SetSupporterColors));
 #endif
 
             RegisterNuiCallbackType("disableImportExportNUI");

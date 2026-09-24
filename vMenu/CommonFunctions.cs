@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -77,6 +78,69 @@ namespace vMenuClient
         }
         #endregion
 
+        public class VehicleColors
+        {
+            public int? primaryColor = null;
+            public int? secondaryColor = null;
+            public int? pearlescentColor = null;
+            public int? wheelColor = null;
+            public int? dashboardColor = null;
+            public int? interiorColor = null;
+            public bool customPrimary = false;
+            public int? primaryR = null;
+            public int? primaryG = null;
+            public int? primaryB = null;
+            public int? primaryFinish = null;
+            public bool customSecondary = false;
+            public int? secondaryFinish = null;
+            public int? secondaryR = null;
+            public int? secondaryG = null;
+            public int? secondaryB = null;
+
+            public bool IsNonDefault =>
+                primaryColor != null
+                || secondaryColor != null
+                || (customPrimary && primaryR != null && primaryG != null && primaryB != null)
+                || (customSecondary && secondaryR != null && secondaryG != null && secondaryB != null)
+                || pearlescentColor != null
+                || wheelColor != null
+                || dashboardColor != null
+                || interiorColor != null;
+        }
+
+        public static void SetDefaultColors(VehicleColors colors)
+        {
+            UserDefaults.VehicleSpawnerDefaultColors = colors;
+        }
+
+        public static void ResetDefaultColors()
+        {
+            UserDefaults.VehicleSpawnerDefaultColors = null;
+        }
+
+        public static bool HasDefaultColors
+        {
+            get
+            {
+                var colors = UserDefaults.VehicleSpawnerDefaultColors;
+                return colors != null && colors.IsNonDefault;
+            }
+        }
+
+        public static void ApplyDefaultColor(Vehicle vehicle)
+        {
+            var colors = UserDefaults.VehicleSpawnerDefaultColors;
+
+            VehicleInfo? _dummy = new();
+            ApplyVehicleColors(vehicle, ref _dummy, colors);
+        }
+
+        public static void ApplyDefaultColor(ref VehicleInfo? vehicleInfo)
+        {
+            var colors = UserDefaults.VehicleSpawnerDefaultColors;
+            ApplyVehicleColors(null, ref vehicleInfo, colors);
+        }
+
         public class SavedPlate
         {
             public string Text { get; set; } = null;
@@ -93,10 +157,7 @@ namespace vMenuClient
         {
             var plate = UserDefaults.VehicleSpawnerDefaultPlate;
 
-            if (plate == null || !vehicle.Exists())
-            {
-                return;
-            }
+
             if (!string.IsNullOrEmpty(plate.Text))
             {
                 vehicle.Mods.LicensePlate = plate.Text;
@@ -1739,6 +1800,114 @@ namespace vMenuClient
             return vehicle.Handle;
         }
 
+        private static void ApplyVehicleColors(Vehicle vehicle, ref VehicleInfo? info, VehicleColors colors)
+        {
+            if (colors == null)
+            {
+                return;
+            }
+
+            void DotoVehicle(Action<Vehicle> action)
+            {
+                if (vehicle != null && vehicle.Exists())
+                {
+                    action(vehicle);
+                }
+            }
+
+            var viColors = info?.colors;
+
+            void AssignVehicleInfoColor(string colorKey, int? val)
+            {
+                if (viColors != null && val.HasValue)
+                {
+                    viColors[colorKey] = val.Value;
+                }
+            }
+
+            if (!colors.customPrimary && colors.primaryColor.HasValue)
+            {
+                var primaryColor = colors.primaryColor.Value;
+                DotoVehicle(veh => SetVehiclePrimaryColor(veh, primaryColor));
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_PRIMARY, primaryColor);
+            }
+            else if (colors.customPrimary && colors.primaryR.HasValue && colors.primaryG.HasValue && colors.primaryB.HasValue)
+            {
+                var primaryR = colors.primaryR.Value;
+                var primaryG = colors.primaryG.Value;
+                var primaryB = colors.primaryB.Value;
+
+                DotoVehicle(veh => SetVehicleCustomPrimaryColour(veh.Handle, primaryR, primaryG, primaryB));
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_PRIMARY, CUSTOM_PAINT);
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_R, primaryR);
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_G, primaryG);
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_B, primaryB);
+
+                if (colors.primaryFinish.HasValue)
+                {
+                    var primaryFinish = colors.primaryFinish.Value;
+                    DotoVehicle(veh => SetVehicleCustomPrimaryPaintType(veh, primaryFinish));
+                    AssignVehicleInfoColor(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_FINISH, primaryFinish);
+                }
+            }
+
+            if (!colors.customSecondary && colors.secondaryColor.HasValue)
+            {
+                var secondaryColor = colors.secondaryColor.Value;
+                DotoVehicle(veh => SetVehicleSecondaryColor(veh, secondaryColor));
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_SECONDARY, secondaryColor);
+            }
+            else if (colors.customSecondary && colors.secondaryR.HasValue && colors.secondaryG.HasValue && colors.secondaryB.HasValue)
+            {
+                var secondaryR = colors.secondaryR.Value;
+                var secondaryG = colors.secondaryG.Value;
+                var secondaryB = colors.secondaryB.Value;
+
+                DotoVehicle(veh => SetVehicleCustomSecondaryColour(veh.Handle, secondaryR, secondaryG, secondaryB));
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_SECONDARY, CUSTOM_PAINT);
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_R, secondaryR);
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_G, secondaryG);
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_B, secondaryB);
+
+                if (colors.secondaryFinish.HasValue)
+                {
+                    var secondaryFinish = colors.secondaryFinish.Value;
+                    DotoVehicle(veh => SetVehicleCustomSecondaryPaintType(veh, secondaryFinish));
+                    AssignVehicleInfoColor(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_FINISH, secondaryFinish);
+                }
+            }
+
+            if (colors.pearlescentColor.HasValue || colors.wheelColor.HasValue)
+            {
+                DotoVehicle(veh =>
+                {
+                    int currPearlescentColor = 0;
+                    int currWheelColor = 0;
+                    GetVehicleExtraColours(vehicle.Handle, ref currPearlescentColor, ref currWheelColor);
+
+                    int pearlescentColor = colors.pearlescentColor ?? currPearlescentColor;
+                    int wheelColor = colors.wheelColor ?? currPearlescentColor;
+                    SetVehicleExtraColours(vehicle.Handle, pearlescentColor, wheelColor);
+                });
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_PEARLESCENT, colors.pearlescentColor);
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_WHEELS, colors.wheelColor);
+            }
+
+            if (colors.dashboardColor.HasValue)
+            {
+                var dashboardColor = colors.dashboardColor.Value;
+                DotoVehicle(veh => SetVehicleDashboardColour(veh.Handle, dashboardColor));
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_DASHBOARD, dashboardColor);
+            }
+
+            if (colors.interiorColor.HasValue)
+            {
+                var interiorColor = colors.interiorColor.Value;
+                DotoVehicle(veh => SetVehicleInteriorColour(veh.Handle, interiorColor));
+                AssignVehicleInfoColor(VEHICLE_INFO_COLOR_INTERIOR, interiorColor);
+            }
+        }
+
         /// <summary>
         /// Waits for the given delay before applying the vehicle mods
         /// </summary>
@@ -1770,36 +1939,35 @@ namespace vMenuClient
                 ToggleVehicleMod(vehicle.Handle, 22, vehicleInfo.xenonHeadlights);
                 SetVehicleLivery(vehicle.Handle, vehicleInfo.livery);
 
-
-                var colors = vehicleInfo.colors;
-
-                int primary = colors["primary"];
-                if (primary == CUSTOM_PAINT)
+                var viColors = vehicleInfo.colors;
+                int? TryGetColor(string colorKey)
                 {
-                    SetVehicleCustomPrimaryColour(vehicle.Handle, colors["primaryr"], colors["primaryg"], colors["primaryb"]);
-                    SetVehicleCustomPrimaryPaintType(vehicle, colors["primaryf"]);
-                }
-                else
-                {
-                    SetVehiclePrimaryColor(vehicle, primary);
+                    if (viColors == null)
+                    {
+                        return null;
+                    }
+
+                    return viColors.TryGetValue(colorKey, out var val) ? val : null;
                 }
 
-                int secondary = colors["secondary"];
-                if (vehicleInfo.colors["secondary"] == CUSTOM_PAINT)
+                var colors = new VehicleColors
                 {
-                    SetVehicleCustomSecondaryColour(vehicle.Handle, colors["secondaryr"], colors["secondaryg"], colors["secondaryb"]);
-                    SetVehicleCustomSecondaryPaintType(vehicle, colors["secondaryf"]);
-                }
-                else
-                {
-                    SetVehicleSecondaryColor(vehicle, secondary);
-                }
+                    primaryColor = TryGetColor(VEHICLE_INFO_COLOR_PRIMARY),
+                    primaryR = TryGetColor(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_R),
+                    primaryG = TryGetColor(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_G),
+                    primaryB = TryGetColor(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_B),
+                    secondaryColor = TryGetColor(VEHICLE_INFO_COLOR_SECONDARY),
+                    secondaryR = TryGetColor(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_R),
+                    secondaryG = TryGetColor(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_G),
+                    secondaryB = TryGetColor(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_B),
+                    pearlescentColor = TryGetColor(VEHICLE_INFO_COLOR_PEARLESCENT),
+                    wheelColor = TryGetColor(VEHICLE_INFO_COLOR_WHEELS),
+                    dashboardColor = TryGetColor(VEHICLE_INFO_COLOR_DASHBOARD),
+                    interiorColor = TryGetColor(VEHICLE_INFO_COLOR_INTERIOR),
+                };
 
-
-                SetVehicleInteriorColour(vehicle.Handle, vehicleInfo.colors["trim"]);
-                SetVehicleDashboardColour(vehicle.Handle, vehicleInfo.colors["dash"]);
-
-                SetVehicleExtraColours(vehicle.Handle, vehicleInfo.colors["pearlescent"], vehicleInfo.colors["wheels"]);
+                VehicleInfo? _dummy = null;
+                ApplyVehicleColors(vehicle, ref _dummy, colors);
 
                 SetVehicleNumberPlateText(vehicle.Handle, vehicleInfo.plateText);
                 SetVehicleNumberPlateTextIndex(vehicle.Handle, vehicleInfo.plateStyle);
@@ -1948,6 +2116,21 @@ namespace vMenuClient
         /// <summary>
         /// Contains all information for a saved vehicle.
         /// </summary>
+
+        public const string VEHICLE_INFO_COLOR_PRIMARY = "primary";
+        public const string VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_R = "primaryr";
+        public const string VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_G = "primaryg";
+        public const string VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_B = "primaryb";
+        public const string VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_FINISH = "primaryf";
+        public const string VEHICLE_INFO_COLOR_SECONDARY = "secondary";
+        public const string VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_R = "secondaryr";
+        public const string VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_G = "secondaryg";
+        public const string VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_B = "secondaryb";
+        public const string VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_FINISH = "secondaryf";
+        public const string VEHICLE_INFO_COLOR_PEARLESCENT = "pearlescent";
+        public const string VEHICLE_INFO_COLOR_WHEELS = "wheels";
+        public const string VEHICLE_INFO_COLOR_DASHBOARD = "dash";
+        public const string VEHICLE_INFO_COLOR_INTERIOR = "trim";
         public struct VehicleInfo
         {
             public Dictionary<string, int> colors { get; set; }
@@ -2046,22 +2229,22 @@ namespace vMenuClient
             GetVehicleInteriorColour(veh.Handle, ref trimColor);
 
 
-            colors.Add("primary", primaryColor);
-            colors.Add("primaryr", primaryColorRed);
-            colors.Add("primaryg", primaryColorGreen);
-            colors.Add("primaryb", primaryColorBlue);
-            colors.Add("primaryf", primaryFinish);
+            colors.Add(VEHICLE_INFO_COLOR_PRIMARY, primaryColor);
+            colors.Add(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_R, primaryColorRed);
+            colors.Add(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_G, primaryColorGreen);
+            colors.Add(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_B, primaryColorBlue);
+            colors.Add(VEHICLE_INFO_COLOR_PRIMARY_CUSTOM_FINISH, primaryFinish);
 
-            colors.Add("secondary", secondaryColor);
-            colors.Add("secondaryr", secondaryColorRed);
-            colors.Add("secondaryg", secondaryColorGreen);
-            colors.Add("secondaryb", secondaryColorBlue);
-            colors.Add("secondaryf", secondaryFinish);
+            colors.Add(VEHICLE_INFO_COLOR_SECONDARY, secondaryColor);
+            colors.Add(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_R, secondaryColorRed);
+            colors.Add(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_G, secondaryColorGreen);
+            colors.Add(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_B, secondaryColorBlue);
+            colors.Add(VEHICLE_INFO_COLOR_SECONDARY_CUSTOM_FINISH, secondaryFinish);
 
-            colors.Add("pearlescent", pearlescentColor);
-            colors.Add("wheels", wheelColor);
-            colors.Add("dash", dashColor);
-            colors.Add("trim", trimColor);
+            colors.Add(VEHICLE_INFO_COLOR_PEARLESCENT, pearlescentColor);
+            colors.Add(VEHICLE_INFO_COLOR_WHEELS, wheelColor);
+            colors.Add(VEHICLE_INFO_COLOR_DASHBOARD, dashColor);
+            colors.Add(VEHICLE_INFO_COLOR_INTERIOR, trimColor);
             var neonR = 255;
             var neonG = 255;
             var neonB = 255;
