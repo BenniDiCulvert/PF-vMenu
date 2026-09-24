@@ -176,6 +176,12 @@ namespace vMenuClient
             set { SetSavedSettingsBool("vehicleSpawnerSpawnInside", value); }
         }
 
+        public static SavedColor VehicleSpawnerDefaultColor
+        {
+            get { return JsonConvert.DeserializeObject<SavedColor>(GetSettingsString("vehicleSpawnerDefaultColor") ?? "{}"); }
+            set { SetSavedSettingsString("vehicleSpawnerDefaultColor", JsonConvert.SerializeObject(value)); }
+        }
+
         public static SavedPlate VehicleSpawnerDefaultPlate
         {
             get { return JsonConvert.DeserializeObject<SavedPlate>(GetSettingsString("vehicleSpawnerDefaultPlate") ?? "{}"); }

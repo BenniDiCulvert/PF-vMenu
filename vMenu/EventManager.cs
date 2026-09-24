@@ -40,6 +40,7 @@ namespace vMenuClient
             EventHandlers.Add("vMenu:GetOutOfCar", new Action<int, int>(GetOutOfCar));
             EventHandlers.Add("vMenu:SetDriftSuspension", new Action<int, bool>(SetDriftSuspension));
             EventHandlers.Add("vMenu:PrivateMessage", new Action<string, string>(PrivateMessage));
+            EventHandlers.Add("vMenu:SetDefaultColor", new Action<string>(color => SetDefaultColor(JsonConvert.DeserializeObject<SavedColor>(color))));
             EventHandlers.Add("vMenu:SetDefaultPlate", new Action<string>(plate => SetDefaultPlate(JsonConvert.DeserializeObject<SavedPlate>(plate))));
             EventHandlers.Add("onClientResourceStart", async (string resourceName) =>
             {
