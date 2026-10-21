@@ -675,7 +675,10 @@ namespace vMenuClient.menus
             {
                 if (item == HexColorPrimary)
                 {
-                    var result = await GetUserInput(windowTitle: "Enter Color Hex", defaultText: (HexColorPrimary.Label).Replace("#", ""), maxInputLength: 6);
+                    var result = await GetUserInput(
+                        windowTitle: "Enter Color Hex",
+                        defaultText: HexColorPrimary.Label?.Replace("#", "") ?? "000000",
+                        maxInputLength: 6);
                     if (!string.IsNullOrEmpty(result))
                     {
                         if (IsHex(result))
@@ -817,14 +820,14 @@ namespace vMenuClient.menus
                 BlueSliderSecondary.Text = $"Blue Color ({BlueSecondary})";
                 FinishListSecondary.ListIndex = FinishSecondary;
 
+                string hexValue = RedSecondary.ToString("X2") + GreenSecondary.ToString("X2") + BlueSecondary.ToString("X2");
+                HexColorSecondary.Label = $"#{hexValue}";
+
                 if (changePaint)
                 {
                     var veh = GetVehicle();
-
                     SetVehicleCustomSecondaryColour(veh.Handle, RedSecondary, GreenSecondary, BlueSecondary);
                     SetVehicleCustomSecondaryPaintType(veh, FinishSecondary);
-                    string hexValue = RedSecondary.ToString("X2") + GreenSecondary.ToString("X2") + BlueSecondary.ToString("X2");
-                    HexColorSecondary.Label = $"#{hexValue}";
                 }
             }
 
@@ -837,7 +840,10 @@ namespace vMenuClient.menus
             {
                 if (item == HexColorSecondary)
                 {
-                    var result = await GetUserInput(windowTitle: "Enter Color Hex", defaultText: (HexColorSecondary.Label).Replace("#", ""), maxInputLength: 6);
+                    var result = await GetUserInput(
+                        windowTitle: "Enter Color Hex",
+                        defaultText: HexColorSecondary.Label?.Replace("#", "") ?? "000000",
+                        maxInputLength: 6);
                     if (!string.IsNullOrEmpty(result))
                     {
                         if (IsHex(result))
